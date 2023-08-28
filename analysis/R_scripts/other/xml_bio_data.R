@@ -206,10 +206,14 @@ tabyl(all_tag_df, file_nm) |>
 
 #-----------------------------------------------------------------
 # now query all files from PTAGIS
+data_path = paste0("T:/DFW-Team FP Upper Columbia Escapement - General/",
+                   "UC_Sthd/Spring STHD PRD Tagging/")
+
 ptagis_file_nms <- read_excel(paste(data_path,
                                     "PRD PTAGIS File Names and Information.xlsx",
                                     sep = "/"),
-                              1) |>
+                              1,
+                              range = "A1:H34") |>
   pull(1)
 
 # tmp <- queryMRRDataFile(file_nm = ptagis_file_nms[9])
