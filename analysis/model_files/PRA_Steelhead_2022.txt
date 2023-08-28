@@ -278,7 +278,7 @@ model {
 	 phi_ENA[2] <- 0 # no upstream detections
 
 	 phi_CRW[1] ~ dbeta(1, 1); 
-	 phi_CRW[2] <- 0 # no upstream detections
+	 phi_CRW[2] ~ dbeta(1, 1); 
 
 	 phi_ICM[1] <- 0 # no upstream detections
 	 phi_ICM[2] <- 0 # no upstream detections
@@ -299,7 +299,7 @@ model {
 	 phi_OKC[2] <- 0 # no upstream detections
 
 	 phi_CHL[1] ~ dbeta(1, 1); 
-	 phi_CHL[2] <- 0 # no upstream detections
+	 phi_CHL[2] ~ dbeta(1, 1); 
 
 	 phi_PES[1] <- 0 # no upstream detections
 	 phi_PES[2] <- 0 # no upstream detections
@@ -311,7 +311,7 @@ model {
 	 phi_OMK[2] ~ dbeta(1, 1); 
 
 	 phi_NAL[1] ~ dbeta(1, 1); 
-	 phi_NAL[2] <- 0 # no upstream detections
+	 phi_NAL[2] ~ dbeta(1, 1); 
 
 	 psi_ZSL[1, 1:n_branch_ZSL] ~ ddirch(ZSL_dirch_vec[1,]); 
 	 psi_ZSL[2, 1:n_branch_ZSL] ~ ddirch(ZSL_dirch_vec[2,]); 
