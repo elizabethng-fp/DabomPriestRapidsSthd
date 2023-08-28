@@ -552,7 +552,8 @@ write_csv(uc_sites,
 # save flowlines
 st_write(flowlines,
          dsn = here("analysis/data/derived_data",
-                    "UC_flowlines.gpkg"))
+                    "UC_flowlines.gpkg"),
+         append = FALSE)
 
 #-----------------------------------------------------------------
 # Build network diagram
