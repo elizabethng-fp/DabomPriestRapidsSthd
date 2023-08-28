@@ -282,6 +282,7 @@ MARI,JDA,Marion Forks Fish Hatchery,MRR
 MARIOC,JDA,"Marion Creek, tributary to North Santiam River",MRR
 MASON,JDA,"Mason Creek, tributary to East Fork Lewis River",MRR
 MCKA2C,JDA,"McKay Creek, Crooked River",MRR
+MCKA2P,JDA,"Acclimation Pond on McKay Creek , tributary to Crooked River in the Deschutes River Basin",MRR
 MCKE,JDA,McKenzie Hatchery,MRR
 MCKER,JDA,McKenzie River,MRR
 MCKESF,JDA,South Fork McKenzie River,MRR
@@ -324,8 +325,10 @@ OCHOCC,JDA,"Ochoco Creek, Crooked River",MRR
 ONTAC,JDA,"Oneonta Creek, Lower Columbia",MRR
 PANT2C,JDA,"Panther Creek (trib. to Wind River, Wash.)",MRR
 PARK,JDA,Parkdale Hatchery,MRR
+PD5,JDA,Columbia River Estuary rkm 62,INT
 PD6,JDA,Columbia River Estuary rkm 68,INT
 PD7,JDA,Columbia River Estuary rkm 70,INT
+PD8,JDA,Columbia River Estuary rkm 82,INT
 PEL,JDA,Pelton Dam Ladder - Deschutes,INT
 PELTON,JDA,Pelton Ladder (Deschutes River) Acclimation Pond,MRR
 PER,JDA,Pelton Reregulating Dam,MRR
@@ -335,6 +338,7 @@ PIER3,JDA,"Pier 3 boat yard, Port of Astoria, OR ",MRR
 PINHC,JDA,Pinhead Creek - Clackamas Subbasin,MRR
 PWD,JDA,"Powerdale Dam, Hood River",MRR
 PWDFBY,JDA,PWD - Release into the Forebay within 0.5 km upstream of Dam,MRR
+QUARTC,JDA,"Quartzville Creek, tributary to Middle Santiam River",MRR
 RAMSYC,JDA,"Ramsey Creek, Fifteen Mile Creek Watershed",MRR
 RATTLC,JDA,Rattlesnake Creek,MRR
 RBF,JDA,Round Butte Fish Xfer Facility,INT
@@ -446,6 +450,8 @@ WRU,JDA,Upper Wind River (WA) rkm 30,INT
 WSH,JDA,Warm Springs Hatchery,INT
 WSPH,JDA,Warm Springs National Fish Hatchery,MRR
 WSR,JDA,Warm Springs River PIT Array,INT
+WSRAHT,JDA,Warm Springs River Rotary Screw Trap Above Hatchery,MRR
+WSRMKN,JDA,Warm Springs River McKinley Arthur Screw Trap,MRR
 WYCHUC,JDA,"Wychus Creek, Upper Deschutes River Basin",MRR
 WZDF,JDA,"Wizard Falls Hatchery, ODFW",MRR
 YOUNGB,JDA,"Youngs Bay, tributary to the Columbia River",MRR
@@ -455,12 +461,14 @@ LBC,LBCB0,"Libby Creek, Methow River",INT
 LLC,LLCA0,Loup Loup Creek Instream Array,INT
 LLC,LLCB0,Loup Loup Creek Instream Array,INT
 LMR,LMRA0,Lower Methow River at Pateros,INT
+LMB,LMRB0,Lower Methow River Barge,INT
 LMR,LMRB0,Lower Methow River at Pateros,INT
 LEAV,LNFA0,Leavenworth National Fish Hatchery,MRR
 LNF,LNFA0,Leavenworth NFH Adult Ladder,INT
 LNF,LNFB0,Leavenworth NFH Adult Ladder,INT
 DRY,LWEA0,"Dryden Diversion Dam, Wenatchee River",MRR
 LWE,LWEA0,Lower Wenatchee River,INT
+LWB,LWEB0,Lower Wenatchee Barge,INT
 LWE,LWEB0,Lower Wenatchee River,INT
 LWENAT,LWNA0,Little Wenatchee River,MRR
 LWN,LWNA0,Little Wenatchee River,INT
