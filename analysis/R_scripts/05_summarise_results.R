@@ -6,9 +6,9 @@
 
 #-----------------------------------------------------------------
 # for years prior to 2023, install an older version that doesn't include some of the uppermost sites in the Okanogan
-devtools::install_github("KevinSee/DABOM",
-                         ref = "develop",
-                         ref = "v2.0.1")
+# devtools::install_github("KevinSee/DABOM",
+#                          ref = "develop",
+#                          ref = "v2.0.1")
 
 #-----------------------------------------------------------------
 # load needed libraries
@@ -201,7 +201,8 @@ for(yr in 2011:2022) {
   pit_obs = prepped_ch %>%
     left_join(bio_df %>%
                 select(tag_code,
-                       origin)) %>%
+                       origin) |>
+                distinct()) %>%
     select(tag_code, origin,
            everything())
 
@@ -248,8 +249,7 @@ for(yr in 2011:2022) {
                                 mutate(across(TagIdAscentCount,
                                               as.numeric)) %>%
                                 mutate(across(TagIdAscentCount,
-                                              tidyr::replace_na,
-                                              0)) %>%
+                                              ~ tidyr::replace_na(., 0))) %>%
                                 mutate(ReAscent = ifelse(TagIdAscentCount > 1, T, F)) %>%
                                 filter(RearType %in% c("H", "W")) %>%
                                 group_by(Species,
@@ -262,8 +262,7 @@ for(yr in 2011:2022) {
                                          origin,
                                          SpawnYear) %>%
                                 summarise(across(matches('tags'),
-                                                 sum,
-                                                 na.rm = T),
+                                                 ~ sum(., na.rm = T)),
                                           .groups = "drop") %>%
                                 mutate(reasc_rate = reascent_tags / tot_tags,
                                        reasc_rate_se = sqrt(reasc_rate * (1 - reasc_rate) / tot_tags)) %>%
@@ -376,8 +375,33 @@ for(yr in 2011:2022) {
                                                                           sd = y)) %>%
                                                     mutate(iter = 1:n())
                                                 })) %>%
-                  unnest(cols = tot_esc_samp)) %>%
+                  unnest(cols = tot_esc_samp),
+                by = join_by(iter, origin)) %>%
       mutate(escp = value * tot_escp)
+
+    # # add all Wenatchee tributaries together
+    # wen_trib_sites <-
+    #   buildPaths(parent_child) |>
+    #   filter(str_detect(path, "LWE"),
+    #          !end_loc %in% c("LWE",
+    #                          "TUM",
+    #                          "UWE")) |>
+    #   filter(str_detect(path, "LWE [:alpha:]+$") |
+    #            str_detect(path, "TUM [:alpha:]+$") |
+    #            str_detect(path, "UWE [:alpha:]+$")) |>
+    #   pull(end_loc)
+    #
+    # escape_post <-
+    #   escape_post |>
+    #   bind_rows(escape_post |>
+    #               dplyr::filter(param %in% wen_trib_sites) |>
+    #               group_by(chain,
+    #                        iter,
+    #                        origin) |>
+    #               summarize(across(escp,
+    #                                sum),
+    #                         param = "All Wen Tribs",
+    #                         .groups = "drop"))
 
     escape_summ = escape_post %>%
       group_by(origin, location = param) %>%
