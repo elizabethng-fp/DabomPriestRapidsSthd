@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: format results to be saved
 # Created: 11/30/22
-# Last Modified: 4/12/2023
+# Last Modified: 8/31/2023
 # Notes:
 
 #-----------------------------------------------------------------
@@ -39,6 +39,8 @@ makeTableNms = function(df) {
         str_replace("Phos", "pHOS") |>
         str_replace("Lowerci", "LCI") |>
         str_replace("Upperci", "UCI") |>
+        str_replace("Lci", "LCI") |>
+        str_replace("Uci", "UCI") |>
         str_replace("Cwt$", "CWT")
     }) %>%
     return()
@@ -82,11 +84,13 @@ spwn_est <- crossing(population = c("Wenatchee",
                                   escp_wen,
                                   escp_met,
                                   escp_est,
-                                  rem_df)
+                                  rem_df,
+                                  trib_NAs)
 
                                if(pop == "Wenatchee") {
                                  prep_wen_sthd_data(query_year = yr,
                                                     n_observers = "two",
+                                                    phos_data = "escapement",
                                                     save_rda = F)
                                  escp_est = escp_wen
                                  rm(escp_wen)
@@ -99,6 +103,22 @@ spwn_est <- crossing(population = c("Wenatchee",
                                } else {
                                  return(NULL)
                                }
+
+                               # for tributary estimates, make any 0s NAs
+                               trib_NAs <-
+                                 trib_spawners |>
+                                 filter(spawners == 0,
+                                        spawners_se == 0) |>
+                                 select(origin,
+                                        river = location) |>
+                                 mutate(across(origin,
+                                               ~ recode(.,
+                                                        "Hatchery" = "na_hos",
+                                                        "Natural" = "na_nos")),
+                                        value = T) |>
+                                 pivot_wider(names_from = origin,
+                                             values_from = value)
+
                                # for 2020, we'll need to do something different
                                if(yr != 2020) {
 
@@ -144,55 +164,68 @@ spwn_est <- crossing(population = c("Wenatchee",
                                                               deltamethod(~ x1 * x2 * (1 - x3),
                                                                           mean = c(redd_est, fpr, phos),
                                                                           cov = diag(c(redd_se, fpr_se, phos_se)^2)),
-                                                              NA)) %>%
+                                                              NA),
+                                          Hatchery_lci = qnorm(0.025, Hatchery, Hatchery_SE),
+                                          Hatchery_uci = qnorm(0.975, Hatchery, Hatchery_SE),
+                                          Natural_lci = qnorm(0.025, Natural, Natural_SE),
+                                          Natural_uci = qnorm(0.975, Natural, Natural_SE)) %>%
                                    ungroup() %>%
                                    mutate(reach = factor(reach,
                                                          levels = c(paste0('W', 1:10),
                                                                     "C1",
                                                                     "N1",
                                                                     "P1",
-                                                                    paste0("MRW", 1:8)))) %>%
+                                                                    paste0("MRW", 1:8),
+                                                                    "MH1",
+                                                                    "WN1",
+                                                                    "T1"))) %>%
                                    select(river, location, reach,
                                           type = index,
-                                          Hatchery:Natural_SE) %>%
+                                          Hatchery:Natural_uci) %>%
                                    mutate(across(type,
-                                                 recode,
-                                                 'Y' = 'Index',
-                                                 'N' = 'Non-Index'),
+                                                 ~ recode(.,
+                                                          'Y' = 'Index',
+                                                          'N' = 'Non-Index')),
                                           across(location,
-                                                 fct_recode,
-                                                 "Below Tumwater (mainstem)" = "Below Tumwater",
-                                                 "Above Tumwater (mainstem)" = "Above Tumwater")) %>%
+                                                 ~ fct_recode(.,
+                                                              "Below Tumwater (mainstem)" = "Below Tumwater",
+                                                              "Above Tumwater (mainstem)" = "Above Tumwater"))) %>%
                                    bind_rows(trib_spawners %>%
                                                rename(spawners_SE = spawners_se) %>%
                                                pivot_wider(names_from = origin,
                                                            values_from = c(spawners,
-                                                                           spawners_SE),
+                                                                           spawners_SE,
+                                                                           lci, uci),
                                                            names_glue = "{origin}_{.value}") %>%
                                                rlang::set_names(function(x) str_remove(x, "_spawners")) %>%
                                                mutate(river = location) %>%
                                                mutate(type = 'DABOM') %>%
                                                select(-spawn_year)) %>%
-                                   mutate(location = factor(location, levels = c('Below Tumwater (mainstem)',
-                                                                                 'Above Tumwater (mainstem)',
-                                                                                 'Icicle',
-                                                                                 'Peshastin',
-                                                                                 'Mission',
-                                                                                 'Chumstick',
-                                                                                 'Chiwaukum',
-                                                                                 'Chiwawa',
-                                                                                 'Nason',
-                                                                                 'Little Wenatchee',
-                                                                                 'White River',
-                                                                                 "Lower Methow",
-                                                                                 "Gold",
-                                                                                 "Libby",
-                                                                                 "Methow Fish Hatchery",
-                                                                                 "Upper Methow",
-                                                                                 "Twisp",
-                                                                                 "Chewuch",
-                                                                                 "Spring Creek",
-                                                                                 "Beaver"))) %>%
+                                   mutate(across(c(Hatchery, Natural),
+                                                 round_half_up)) %>%
+                                   mutate(across(ends_with("lci"),
+                                                 ~ if_else(. < 0, 0, .))) |>
+                                   mutate(location = factor(location,
+                                                            levels = c('Below Tumwater (mainstem)',
+                                                                       'Above Tumwater (mainstem)',
+                                                                       'Icicle',
+                                                                       'Peshastin',
+                                                                       'Mission',
+                                                                       'Chumstick',
+                                                                       'Chiwaukum',
+                                                                       'Chiwawa',
+                                                                       'Nason',
+                                                                       'Little Wenatchee',
+                                                                       'White River',
+                                                                       "Lower Methow",
+                                                                       "Gold",
+                                                                       "Libby",
+                                                                       "Methow Fish Hatchery",
+                                                                       "Upper Methow",
+                                                                       "Twisp",
+                                                                       "Chewuch",
+                                                                       "Spring Creek",
+                                                                       "Beaver"))) %>%
                                    arrange(location, reach, type) %>%
                                    mutate(h_cv = Hatchery_SE / Hatchery,
                                           n_cv = Natural_SE / Natural)
@@ -229,48 +262,116 @@ spwn_est <- crossing(population = c("Wenatchee",
                                                       HOS_cv = h_cv),
                                              by = c("river", "reach", "reach_type"))
 
-                                 spwn_yr <- spwn_rch |>
-                                   group_by(river) |>
-                                   summarize(across(c(nos_est = Natural,
-                                                      hos_est = Hatchery),
-                                                    sum,
-                                                    na.rm = T),
-                                             across(c(nos_se = Natural_SE,
-                                                      hos_se = Hatchery_SE),
-                                                    ~ sqrt(sum(.^2, na.rm = T))),
-                                             .groups = "drop") %>%
-                                   mutate(nos_cv = nos_se / nos_est,
-                                          hos_cv = hos_se / hos_est) %>%
-                                   mutate(total_spawners = nos_est + hos_est) |>
-                                   mutate(across(river,
-                                                 recode,
-                                                 "Wenatchee" = "Wenatchee (mainstem)",
-                                                 "Methow" = "Methow (mainstem)"),
-                                          across(river,
-                                                 as.factor),
-                                          across(river,
-                                                 fct_relevel,
-                                                 "Wenatchee (mainstem)",
-                                                 "Methow (mainstem)",
-                                                 after = Inf)) |>
-                                   arrange(river) |>
-                                   select(river,
-                                          total_spawners,
-                                          starts_with("nos"),
-                                          starts_with("hos"))
+                                 # lump all mainstem reaches together
+                                 if(pop == "Methow") {
+                                   spwn_yr <- spwn_rch |>
+                                     group_by(river) |>
+                                     summarize(across(c(nos_est = Natural,
+                                                        hos_est = Hatchery),
+                                                      sum,
+                                                      na.rm = T),
+                                               across(c(nos_se = Natural_SE,
+                                                        hos_se = Hatchery_SE),
+                                                      ~ sqrt(sum(.^2, na.rm = T))),
+                                               .groups = "drop") %>%
+                                     mutate(nos_lci = qnorm(0.025, nos_est, nos_se),
+                                            nos_uci = qnorm(0.975, nos_est, nos_se),
+                                            hos_lci = qnorm(0.025, hos_est, hos_se),
+                                            hos_uci = qnorm(0.975, hos_est, hos_se),
+                                            nos_cv = nos_se / nos_est,
+                                            hos_cv = hos_se / hos_est) %>%
+                                     mutate(total_spawners = nos_est + hos_est) |>
+                                     mutate(across(river,
+                                                   recode,
+                                                   "Wenatchee" = "Wenatchee (mainstem)",
+                                                   "Methow" = "Lower Methow (mainstem)"),
+                                            across(river,
+                                                   as.factor),
+                                            across(river,
+                                                   fct_relevel,
+                                                   "Wenatchee (mainstem)",
+                                                   "Lower Methow (mainstem)",
+                                                   after = Inf)) |>
+                                     arrange(river) |>
+                                     select(river,
+                                            total_spawners,
+                                            starts_with("nos"),
+                                            starts_with("hos"))
+                                 }
 
-                                 spwn_yr %<>%
+                                 # split mainstem Wenatchee into reaches above/below Tumwater
+                                 if(pop == "Wenatchee") {
+                                   spwn_yr <- spwn_rch |>
+                                     group_by(river,
+                                              location) |>
+                                     summarize(across(c(nos_est = Natural,
+                                                        hos_est = Hatchery),
+                                                      ~ sum(.,
+                                                            na.rm = T)),
+                                               across(c(nos_se = Natural_SE,
+                                                        hos_se = Hatchery_SE),
+                                                      ~ sqrt(sum(.^2, na.rm = T))),
+                                               .groups = "drop") %>%
+                                     mutate(nos_lci = qnorm(0.025, nos_est, nos_se),
+                                            nos_uci = qnorm(0.975, nos_est, nos_se),
+                                            hos_lci = qnorm(0.025, hos_est, hos_se),
+                                            hos_uci = qnorm(0.975, hos_est, hos_se),
+                                            nos_cv = nos_se / nos_est,
+                                            hos_cv = hos_se / hos_est) %>%
+                                     mutate(across(ends_with("lci"),
+                                                   ~ if_else(. < 0, 0, .))) |>
+                                     mutate(total_spawners = nos_est + hos_est) |>
+                                     mutate(across(river,
+                                                   ~ recode(.,
+                                                            "Wenatchee" = "Wenatchee (mainstem)",
+                                                            "Methow" = "Lower Methow (mainstem)")),
+                                            across(river,
+                                                   as.factor),
+                                            across(river,
+                                                   ~ fct_relevel(.,
+                                                                 "Wenatchee (mainstem)",
+                                                                 "Lower Methow (mainstem)",
+                                                                 after = Inf))) |>
+                                     arrange(river,
+                                             desc(location)) |>
+                                     select(river = location,
+                                            total_spawners,
+                                            starts_with("nos"),
+                                            starts_with("hos"))
+                                 }
+
+                                 spwn_yr <-
+                                   spwn_yr |>
+                                   left_join(trib_NAs) |>
+                                   mutate(across(c(na_hos, na_nos),
+                                                 ~ replace_na(., FALSE))) |>
+                                   rowwise() |>
+                                   mutate(across(starts_with("nos"),
+                                                 ~ if_else(na_nos & nos_est == 0, NA_real_, .)),
+                                          across(starts_with("hos"),
+                                                 ~ if_else(na_hos & hos_est == 0, NA_real_, .))) |>
+                                   ungroup() |>
+                                   select(-starts_with("na_"))
+
+                                 spwn_yr <-
+                                   spwn_yr %>%
                                    bind_rows(spwn_yr %>%
                                                summarize(river = "Total",
                                                          across(c(total_spawners,
                                                                   nos_est,
                                                                   hos_est),
-                                                                sum),
+                                                                ~ sum(., na.rm = T)),
                                                          across(ends_with("_se"),
                                                                 ~ sqrt(sum(.^2, na.rm = T))),
-                                                         nos_cv = nos_se / nos_est,
-                                                         hos_cv = hos_se / hos_est,
-                                                         .groups = "drop")) %>%
+                                                         .groups = "drop") %>%
+                                               mutate(nos_lci = qnorm(0.025, nos_est, nos_se),
+                                                      nos_uci = qnorm(0.975, nos_est, nos_se),
+                                                      hos_lci = qnorm(0.025, hos_est, hos_se),
+                                                      hos_uci = qnorm(0.975, hos_est, hos_se),
+                                                      nos_cv = nos_se / nos_est,
+                                                      hos_cv = hos_se / hos_est) %>%
+                                               mutate(across(ends_with("lci"),
+                                                             ~ if_else(. < 0, 0, .)))) %>%
                                    rowwise() %>%
                                    mutate(phos = hos_est / (hos_est + nos_est),
                                           phos_se = deltamethod(~ x1 / (x1 + x2),
@@ -284,6 +385,8 @@ spwn_est <- crossing(population = c("Wenatchee",
                                           across(river,
                                                  fct_relevel,
                                                  c("Wenatchee (mainstem)",
+                                                   "Above Tumwater (mainstem)",
+                                                   "Below Tumwater (mainstem)",
                                                    "Methow (mainstem)",
                                                    "Total"),
                                                  after = Inf)) %>%
@@ -325,8 +428,8 @@ spwn_est <- crossing(population = c("Wenatchee",
                                    mutate(across(year,
                                                  as.factor)) %>%
                                    mutate(across(year,
-                                                 fct_explicit_na,
-                                                 na_level = "Total")) %>%
+                                                 ~ fct_na_value_to_level(.,
+                                                                         level = "Total"))) %>%
                                    arrange(subbasin,
                                            year,
                                            origin)
@@ -351,6 +454,11 @@ spwn_est <- crossing(population = c("Wenatchee",
                                                  replace_na,
                                                  0)) |>
                                    rowwise() %>%
+                                   mutate(
+                                     across(
+                                       c(lci, uci),
+                                       ~ max(0, . - removed)
+                                     )) |>
                                    mutate(escp = max(0, estimate - removed)) %>%
                                    ungroup() %>%
                                    left_join(rt_df %>%
@@ -387,65 +495,95 @@ spwn_est <- crossing(population = c("Wenatchee",
                                           type,
                                           spawners = main_spwn,
                                           spawners_se = main_spwn_se) %>%
+                                   mutate(lci = qnorm(0.025, spawners, spawners_se),
+                                          uci = qnorm(0.975, spawners, spawners_se),
+                                          across(lci,
+                                                 ~ if_else(. < 0, 0, .))) |>
                                    bind_rows(trib_spawners %>%
+                                               select(-spawn_year) |>
                                                mutate(river = location) |>
                                                mutate(type = 'DABOM')) |>
+                                   mutate(across(
+                                     origin,
+                                     ~ recode(.,
+                                              "Hatchery" = "hos",
+                                              "Natural" = "nos")
+                                   )) |>
+                                   mutate(cv = spawners_se / spawners) |>
                                    pivot_wider(names_from = origin,
                                                values_from = c(spawners,
-                                                               spawners_se),
+                                                               spawners_se,
+                                                               lci, uci,
+                                                               cv),
                                                names_glue = "{origin}_{.value}") |>
                                    rlang::set_names(function(x) str_remove(x, "_spawners")) |>
                                    mutate(across(
                                      location,
-                                     factor,
-                                     levels = c('Below_TUM',
-                                                'TUM_bb',
-                                                'Icicle',
-                                                'Peshastin',
-                                                'Mission',
-                                                'Chumstick',
-                                                'Chiwaukum',
-                                                'Chiwawa',
-                                                'Nason',
-                                                'Little Wenatchee',
-                                                'White River',
-                                                "Wenatchee (mainstem)",
-                                                "Lower Methow",
-                                                "Gold",
-                                                "Libby",
-                                                "Methow Fish Hatchery",
-                                                "Upper Methow",
-                                                "Twisp",
-                                                "Chewuch",
-                                                "Spring Creek",
-                                                "Beaver"))) |>
+                                     ~ factor(.,
+                                              levels = c('Below_TUM',
+                                                         'TUM_bb',
+                                                         'Icicle',
+                                                         'Peshastin',
+                                                         'Mission',
+                                                         'Chumstick',
+                                                         'Chiwaukum',
+                                                         'Chiwawa',
+                                                         'Nason',
+                                                         'Little Wenatchee',
+                                                         'White River',
+                                                         "Wenatchee (mainstem)",
+                                                         "Lower Methow",
+                                                         "Gold",
+                                                         "Libby",
+                                                         "Methow Fish Hatchery",
+                                                         "Upper Methow",
+                                                         "Twisp",
+                                                         "Chewuch",
+                                                         "Spring Creek",
+                                                         "Beaver")))) |>
                                    arrange(location, type) |>
-                                   mutate(h_cv = Hatchery_se / Hatchery,
-                                          n_cv = Natural_se / Natural,
-                                          total_spawners = Natural + Hatchery) |>
+                                   mutate(total_spawners = nos + hos) |>
+                                   rename(nos_est = nos,
+                                          hos_est = hos) |>
                                    select(river,
                                           # reach,
                                           # reach_type = type,
                                           total_spawners,
-                                          nos_est = Natural,
-                                          nos_se = Natural_se,
-                                          nos_cv = n_cv,
-                                          hos_est = Hatchery,
-                                          hos_se = Hatchery_se,
-                                          hos_cv = h_cv)
+                                          starts_with("nos"),
+                                          starts_with("hos"))
 
-                                 spwn_yr %<>%
+                                 spwn_yr <-
+                                   spwn_yr |>
+                                   left_join(trib_NAs) |>
+                                   mutate(across(c(na_hos, na_nos),
+                                                 ~ replace_na(., FALSE))) |>
+                                   rowwise() |>
+                                   mutate(across(starts_with("nos"),
+                                                 ~ if_else(na_nos & nos_est == 0, NA_real_, .)),
+                                          across(starts_with("hos"),
+                                                 ~ if_else(na_hos & hos_est == 0, NA_real_, .))) |>
+                                   ungroup() |>
+                                   select(-starts_with("na_"))
+
+                                 spwn_yr <-
+                                   spwn_yr |>
                                    bind_rows(spwn_yr %>%
                                                summarize(river = "Total",
                                                          across(c(total_spawners,
                                                                   nos_est,
                                                                   hos_est),
-                                                                sum),
+                                                                ~ sum(., na.rm = T)),
                                                          across(ends_with("_se"),
                                                                 ~ sqrt(sum(.^2, na.rm = T))),
-                                                         nos_cv = nos_se / nos_est,
-                                                         hos_cv = hos_se / hos_est,
-                                                         .groups = "drop")) %>%
+                                                         .groups = "drop") %>%
+                                               mutate(nos_lci = qnorm(0.025, nos_est, nos_se),
+                                                      nos_uci = qnorm(0.975, nos_est, nos_se),
+                                                      hos_lci = qnorm(0.025, hos_est, hos_se),
+                                                      hos_uci = qnorm(0.975, hos_est, hos_se),
+                                                      nos_cv = nos_se / nos_est,
+                                                      hos_cv = hos_se / hos_est) %>%
+                                               mutate(across(ends_with("lci"),
+                                                             ~ if_else(. < 0, 0, .)))) %>%
                                    rowwise() %>%
                                    mutate(phos = hos_est / (hos_est + nos_est),
                                           phos_se = deltamethod(~ x1 / (x1 + x2),
@@ -488,718 +626,104 @@ spwn_df <- spwn_est %>%
                        function(x) x[["spwn_yr"]])) %>%
   select(-results_list) %>%
   unnest(spwn_yr) %>%
+  mutate(across(river,
+                ~ fct_relevel(.,
+                              "Total",
+                              after = Inf))) |>
+  arrange(spawn_year,
+          population,
+          river) |>
   makeTableNms()
 
 #-----------------------------------------------------------------
 # generate tables based on DABOM output
-dabom_est <- crossing(spawn_year = c(2011:max_yr)) %>%
+dabom_df <-
+  crossing(spawn_year = c(2011:max_yr)) %>%
   mutate(run_year = spawn_year - 1) %>%
   select(run_year, spawn_year) %>%
   mutate(dam_cnt_name = if_else(spawn_year %in% c(2011:2015, 2018),
                                 "PriestRapids",
-                                "RockIsland")) %>%
-  mutate(all_results = map2(spawn_year,
-                            dam_cnt_name,
-                            .f = function(yr, dam_cnt_name) {
+                                "RockIsland"))
+# get all the tag summaries
+all_tags <-
+  dabom_df |>
+  mutate(tag_summ = map2(spawn_year,
+                         dam_cnt_name,
+                         .f = function(yr, dam_nm) {
+                           sroem::query_dabom_results(dabom_dam_nm = dam_nm,
+                                                      query_year = yr,
+                                                      result_type = "tag_summ")
+                         }))
 
-                              message(paste("\n\t Estimates from", yr, "\n"))
-
-                              # load data
-                              load(here("analysis/data/derived_data/estimates",
-                                        dam_cnt_name,
-                                        paste0("UC_Sthd_DABOM_", yr, ".rda")))
-
-                              # age proportions that year
-                              age_prop_yr <- tag_summ |>
-                                filter(!group %in% c("Start", "Other")) |>
-                                mutate(across(group,
-                                              recode,
-                                              "BelowPriest" = "Below Priest",
-                                              "WellsPool" = "Wells Pool"),
-                                       across(origin,
-                                              recode,
-                                              "H" = "Hatchery",
-                                              "W" = "Natural")) |>
-                                mutate(run_year = year - 1) |>
-                                select(tag_code,
-                                       population = group,
-                                       origin,
-                                       age) |>
-                                left_join(age_table |>
-                                            select(age,
-                                                   fresh_water,
-                                                   salt_water,
-                                                   total_age),
-                                          by = "age") |>
-                                pivot_longer(cols = fresh_water:total_age,
-                                             names_to = "age_type",
-                                             values_to = "age_label") |>
-                                group_by(population,
-                                         origin,
-                                         age_type) |>
-                                count(age_label) |>
-                                filter(!is.na(age_label)) |>
-                                mutate(sample_size = sum(n),
-                                       prop = n / sample_size) |>
-                                ungroup() |>
-                                # add data for all Priest tags
-                                bind_rows(tag_summ |>
-                                            mutate(across(origin,
-                                                          recode,
-                                                          "H" = "Hatchery",
-                                                          "W" = "Natural")) |>
-                                            mutate(run_year = year - 1) |>
-                                            select(tag_code,
-                                                   population = group,
-                                                   origin,
-                                                   age) |>
-                                            left_join(age_table |>
-                                                        select(age,
-                                                               fresh_water,
-                                                               salt_water,
-                                                               total_age),
-                                                      by = "age") |>
-                                            pivot_longer(cols = fresh_water:total_age,
-                                                         names_to = "age_type",
-                                                         values_to = "age_label") |>
-                                            group_by(origin,
-                                                     age_type) |>
-                                            count(age_label) |>
-                                            filter(!is.na(age_label)) |>
-                                            mutate(sample_size = sum(n),
-                                                   prop = n / sample_size) |>
-                                            ungroup() |>
-                                            add_column(population = "Priest Rapids Tags",
-                                                       .before = 0))
-
-                              # population escapement that year
-                              pop_escp_yr <- escape_post %>%
-                                filter(param %in% c('LWE',
-                                                    'ENL',
-                                                    'LMR',
-                                                    'OKL', 'FST',
-                                                    'ICH', 'JD1', 'JDA', 'PRH', 'PRO', 'PRV', 'RSH', 'TMF')) %>%
-                                mutate(param = recode(param,
-                                                      'LWE' = 'Wenatchee',
-                                                      'ENL' = 'Entiat',
-                                                      'LMR' = 'Methow',
-                                                      'OKL' = 'Okanogan',
-                                                      'FST' = 'Okanogan',
-                                                      'ICH' = 'Below Priest',
-                                                      'JD1' = 'Below Priest',
-                                                      'JDA' = 'Below Priest',
-                                                      'PRH' = 'Below Priest',
-                                                      'PRO' = 'Below Priest',
-                                                      'PRV' = 'Below Priest',
-                                                      'RSH' = 'Below Priest',
-                                                      'TMF' = 'Below Priest')) %>%
-                                mutate(param = factor(param,
-                                                      levels = c("Wenatchee",
-                                                                 "Entiat",
-                                                                 "Methow",
-                                                                 "Okanogan",
-                                                                 "Below Priest"))) %>%
-                                group_by(chain, iter, origin, param) %>%
-                                summarize(across(escp,
-                                                 sum),
-                                          .groups = "drop") %>%
-                                group_by(origin,
-                                         population = param) %>%
-                                summarise(mean = mean(escp),
-                                          median = median(escp),
-                                          # mode = estMode(escp),
-                                          sd = sd(escp),
-                                          .groups = 'drop') %>%
-                                mutate(across(c(mean, median, sd),
-                                              ~ if_else(. < 0, 0, .))) %>%
-                                select(-mean) %>%
-                                rename(est = median,
-                                       se = sd) %>%
-                                mutate(across(origin,
-                                              recode,
-                                              "H" = "hos",
-                                              "W" = "nos"),
-                                       cv = se / est) %>%
-                                pivot_wider(names_from = origin,
-                                            values_from = c(est, se, cv),
-                                            names_glue = "{origin}_{.value}") %>%
-                                mutate(total_escapement = nos_est + hos_est,
-                                       phos = hos_est / (hos_est + nos_est)) %>%
-                                select(population,
-                                       total_escapement,
-                                       starts_with("nos"),
-                                       starts_with("hos"),
-                                       phos)
-
-                              # all escapement locations that year
-                              escp_yr = escape_summ %>%
-                                mutate(across(origin,
-                                              recode,
-                                              "H" = "Hatchery",
-                                              "W" = "Natural")) %>%
-                                select(-species, -spawn_year,
-                                       -skew, -kurtosis) %>%
-                                mutate(across(mean:mode,
-                                              janitor::round_half_up),
-                                       across(mean:mode,
-                                              as.integer)) %>%
-                                rename(estimate = median,
-                                       se = sd) %>%
-                                select(-mean, -mode)
-
-                              # detection probabilities that year
-                              detect_yr <- detect_summ %>%
-                                select(node,
-                                       n_tags,
-                                       estimate = median,
-                                       se = sd,
-                                       ends_with("CI"))
-
-                              # sex proportions that year
-                              sexed_tags <- tag_summ %>%
-                                filter(group %in% c("Wenatchee",
-                                                    "Entiat",
-                                                    "Methow",
-                                                    "Okanogan",
-                                                    "BelowPriest")) %>%
-                                mutate(across(group,
-                                              fct_recode,
-                                              "Below Priest" = "BelowPriest"),
-                                       across(group,
-                                              fct_drop)) %>%
-                                bind_rows(tag_summ %>%
-                                            mutate(group = "Priest Rapids Tags")) %>%
-                                group_by(population = group,
-                                         origin,
-                                         sex) %>%
-                                summarise(n_tags = n_distinct(tag_code[!is.na(sex)]),
-                                          .groups = "drop") %>%
-                                filter(!is.na(sex)) %>%
-                                full_join(expand(.,
-                                                 population,
-                                                 origin,
-                                                 sex),
-                                          by = c("population", "origin", "sex")) %>%
-                                mutate(across(n_tags,
-                                              replace_na,
-                                              0))
-
-                              sex_yr <- sexed_tags %>%
-                                bind_rows(sexed_tags %>%
-                                            group_by(population, sex) %>%
-                                            summarize(across(n_tags,
-                                                             sum),
-                                                      .groups = "drop") %>%
-                                            mutate(origin = "All")) %>%
-                                mutate(origin = factor(origin,
-                                                       levels = c("W", "H", "All")),
-                                       across(origin,
-                                              fct_recode,
-                                              "Natural" = "W",
-                                              "Hatchery" = "H")) %>%
-                                mutate(group = paste(population, origin, sep = "_")) %>%
-                                arrange(population, origin, sex) %>%
-                                group_by(group) %>%
-                                mutate(total_sexed = sum(n_tags)) %>%
-                                mutate(prop = n_tags / total_sexed,
-                                       prop_se = sqrt((prop * (1 - prop)) / total_sexed)) %>%
-                                ungroup() %>%
-                                left_join(pop_escp_yr %>%
-                                            rename(total_est = total_escapement) %>%
-                                            rowwise() %>%
-                                            mutate(total_se = sqrt(sum(c(nos_se,
-                                                                         hos_se)^2))) %>%
-                                            ungroup() %>%
-                                            select(population,
-                                                   ends_with("est"),
-                                                   ends_with("se")) %>%
-                                            pivot_longer(c(ends_with("est"),
-                                                           ends_with("se"))) %>%
-                                            mutate(type = if_else(str_detect(name, "_se$"),
-                                                                  "se",
-                                                                  "est"),
-                                                   origin = str_split(name, "_", simplify = T)[,1],
-                                                   across(origin,
-                                                          recode,
-                                                          "total" = "All",
-                                                          "nos" = "Natural",
-                                                          "hos" = "Hatchery")) %>%
-                                            select(-name) %>%
-                                            pivot_wider(names_from = type,
-                                                        values_from = value),
-                                          by = c("population", "origin")) %>%
-                                rowwise() %>%
-                                mutate(across(est,
-                                              ~ . * prop),
-                                       se = deltamethod(~ x1 * x2,
-                                                        mean = c(est, prop),
-                                                        cov = diag(c(se, prop_se)^2))) %>%
-                                ungroup() %>%
-                                select(population,
-                                       origin,
-                                       sex,
-                                       n_tags,
-                                       total_sexed,
-                                       starts_with("prop"),
-                                       escp = est,
-                                       escp_se = se)
-
-
-                              # convert lengths from mm to cm if needed
-                              if(max(tag_summ$fork_length, na.rm = T) > 100) {
-                                tag_summ %<>%
-                                  mutate(across(fork_length,
-                                                measurements::conv_unit,
-                                                from = "mm",
-                                                to = "cm"))
-                              }
-
-                              size_yr <- tag_summ |>
-                                filter(!group %in% c("Start", "Other")) |>
-                                mutate(across(group,
-                                              fct_drop)) |>
-                                mutate(across(group,
-                                              recode,
-                                              "BelowPriest" = "Below Priest",
-                                              "WellsPool" = "Wells Pool"),
-                                       across(origin,
-                                              recode,
-                                              "H" = "Hatchery",
-                                              "W" = "Natural")) |>
-                                select(tag_code,
-                                       population = group,
-                                       origin,
-                                       age,
-                                       fork_length) |>
-                                left_join(age_table |>
-                                            select(age,
-                                                   salt_water),
-                                          by = "age") |>
-                                filter(!is.na(fork_length),
-                                       !is.na(salt_water)) |>
-                                group_by(population,
-                                         origin,
-                                         salt_water) |>
-                                summarize(across(fork_length,
-                                                 list(mean = mean,
-                                                      sd = sd,
-                                                      n = length),
-                                                 .names = "{.fn}"),
-                                          .groups = "drop") %>%
-                                rename(salt_water_age = salt_water) |>
-                                # add data for all Priest Rapids tags
-                                bind_rows(tag_summ |>
-                                            mutate(across(origin,
-                                                          recode,
-                                                          "H" = "Hatchery",
-                                                          "W" = "Natural")) |>
-                                            select(tag_code,
-                                                   origin,
-                                                   age,
-                                                   fork_length) |>
-                                            left_join(age_table |>
-                                                        select(age,
-                                                               salt_water),
-                                                      by = "age") |>
-                                            filter(!is.na(fork_length),
-                                                   !is.na(salt_water)) |>
-                                            group_by(origin,
-                                                     salt_water) |>
-                                            summarize(across(fork_length,
-                                                             list(mean = mean,
-                                                                  sd = sd,
-                                                                  n = length),
-                                                             .names = "{.fn}"),
-                                                      .groups = "drop") %>%
-                                            rename(salt_water_age = salt_water) |>
-                                            add_column(population = "Priest Rapids Tags",
-                                                       .before = 0))
-
-                              # proportions / escapement of mark groups, by population
-                              mark_tag_summ = tag_summ |>
-                                mutate(cwt = if_else(is.na(cwt), F,
-                                                     if_else(cwt %in% c("SN", "BD"),
-                                                             T, NA)),
-                                       ad_clip = if_else(is.na(ad_clip) | origin == "W",
-                                                         F,
-                                                         if_else(ad_clip == "AD", T, NA))) |>
-                                mutate(ad_clip_chr = recode(as.character(ad_clip),
-                                                            "TRUE" = "AD",
-                                                            "FALSE" = "AI"),
-                                       cwt_chr = recode(as.character(cwt),
-                                                        "TRUE" = "CWT",
-                                                        "FALSE" = "noCWT")) |>
-                                tidyr::unite("mark_grp", ad_clip_chr, cwt_chr, remove = T) |>
-                                mutate(mark_grp = if_else(origin == "W",
-                                                          "Wild",
-                                                          mark_grp))
-
-                              # proportions of each type of fish (H/W, Ad-clip, CWT combinations) past each site
-                              # determine which group/population each site is in
-                              site_pop_df = buildNodeOrder(parent_child) |>
-                                mutate(group = if_else(node == "PRA",
-                                                       "Start",
-                                                       if_else(str_detect(path, 'LWE') | node %in% c("CLK"),
-                                                               "Wenatchee",
-                                                               if_else(str_detect(path, "ENL"),
-                                                                       "Entiat",
-                                                                       if_else(str_detect(path, "LMR"),
-                                                                               "Methow",
-                                                                               if_else(str_detect(path, "OKL") | node %in% c("FST"),
-                                                                                       "Okanogan",
-                                                                                       if_else(str_detect(path, "RIA", negate = T) & str_length(path > 3),
-                                                                                               "BelowPriest",
-                                                                                               if_else(node == "WEA",
-                                                                                                       "WellsPool",
-                                                                                                       "Other")))))))) |>
-                                mutate(group = factor(group,
-                                                      levels = c("Wenatchee",
-                                                                 "Entiat",
-                                                                 "Methow",
-                                                                 "Okanogan",
-                                                                 "BelowPriest",
-                                                                 "WellsPool",
-                                                                 "Start",
-                                                                 "Other"))) |>
-                                rename(site_code = node,
-                                       site_order = node_order,
-                                       population = group)
-
-
-                              mark_grp_prop = mark_tag_summ |>
-                                mutate(spawn_site = str_remove(spawn_node, "B0$"),
-                                       spawn_site = str_remove(spawn_site, "A0$"),
-                                       spawn_site = recode(spawn_site,
-                                                           "S" = "SA0")) |>
-                                left_join(site_pop_df |>
-                                            select(end_loc = site_code,
-                                                   population,
-                                                   path) |>
-                                            separate(path,
-                                                     into = paste("site", 1:8, sep = "_")) |>
-                                            pivot_longer(starts_with('site_'),
-                                                         names_to = "node_order",
-                                                         values_to = "site_code") |>
-                                            filter(!is.na(site_code)) |>
-                                            select(-node_order),
-                                          by = c("spawn_site" = "end_loc"),
-                                          multiple = "all") |>
-                                group_by(origin,
-                                         population = group,
-                                         site_code, ad_clip, cwt, mark_grp) |>
-                                summarise(n_tags = n_distinct(tag_code),
-                                          .groups = "drop") |>
-                                right_join(crossing(site_code = union(parent_child$parent, parent_child$child),
-                                                    expand(mark_tag_summ, nesting(origin, ad_clip, cwt, mark_grp))) |>
-                                             left_join(site_pop_df |>
-                                                         select(site_code,
-                                                                population),
-                                                       by = "site_code") |>
-                                             relocate(population, .after = 1),
-                                           by = c("origin", "population", "site_code", "ad_clip", "cwt", "mark_grp")) |>
-                                arrange(site_code, mark_grp) |>
-                                mutate(across(n_tags,
-                                              replace_na,
-                                              0)) |>
-                                group_by(origin,
-                                         site_code) |>
-                                mutate(tot_tags = sum(n_tags),
-                                       prop = n_tags / tot_tags,
-                                       # using normal approximation
-                                       prop_se = sqrt((prop * (1 - prop))/tot_tags)) |>
-                                ungroup() |>
-                                arrange(population,
-                                        site_code,
-                                        origin,
-                                        ad_clip,
-                                        cwt)
-
-                              # generate posterior samples of mark proportions
-                              escape_post <- escape_post |>
-                                mutate(n_iter = max(iter),
-                                       iter = (chain - 1) * n_iter + iter)
-                              set.seed(6)
-                              n_iter = max(escape_post$iter)
-                              prop_samps = mark_grp_prop |>
-                                filter(tot_tags > 0) |>
-                                group_by(origin,
-                                         population,
-                                         site_code,
-                                         tot_tags) |>
-                                nest() |>
-                                mutate(samp = map(data,
-                                                  .f = function(x) {
-                                                    rmultinom(n_iter, sum(x$n_tags), x$prop) |>
-                                                      set_colnames(1:n_iter) |>
-                                                      set_rownames(x$mark_grp) |>
-                                                      as_tibble(rownames = 'mark_grp') |>
-                                                      pivot_longer(-1,
-                                                                   names_to = "iter",
-                                                                   values_to = "n_tags") |>
-                                                      mutate(across(iter,
-                                                                    as.integer)) |>
-                                                      group_by(iter) |>
-                                                      mutate(prop = n_tags / sum(n_tags)) |>
-                                                      arrange(iter, mark_grp) |>
-                                                      ungroup()
-                                                  })) |>
-                                ungroup() |>
-                                select(-data) |>
-                                unnest(samp) |>
-                                left_join(mark_grp_prop |>
-                                            select(-n_tags,
-                                                   -starts_with("prop")),
-                                          by = c("population",
-                                                 "site_code",
-                                                 "origin", "tot_tags", "mark_grp")) |>
-                                bind_rows(mark_grp_prop |>
-                                            filter(tot_tags == 0) |>
-                                            crossing(iter = 1:n_iter) |>
-                                            select(-prop_se)) |>
-                                arrange(population,
-                                        site_code,
-                                        origin, mark_grp, iter) |>
-                                select(iter, any_of(names(mark_grp_prop)))
-
-                              # posterior samples
-                              mark_post = escape_post |>
-                                inner_join(prop_samps,
-                                           by = c("iter", "origin",
-                                                  "param" = "site_code"),
-                                           multiple = "all") %>%
-                                mutate(across(c(prop,
-                                                n_tags,
-                                                tot_tags),
-                                              replace_na,
-                                              0)) |>
-                                mutate(prop = if_else(value == 0,
-                                                      0,
-                                                      prop)) |>
-                                mutate(n_fish = escp * prop)
-
-                              mark_grp_yr = mark_post |>
-                                group_by(site_code = param,
-                                         origin,
-                                         ad_clip,
-                                         cwt,
-                                         mark_grp) |>
-                                summarise(across(n_fish,
-                                                 list(mean = mean,
-                                                      median = median,
-                                                      # mode = DABOM::estMode,
-                                                      se = sd,
-                                                      skew = moments::skewness,
-                                                      kurtosis = moments::kurtosis,
-                                                      lowerCI = ~ coda::HPDinterval(coda::as.mcmc(.x))[,1],
-                                                      upperCI = ~ coda::HPDinterval(coda::as.mcmc(.x))[,2]),
-                                                 # na.rm = T,
-                                                 .names = "{.fn}"),
-                                          .groups = "drop") |>
-                                # mutate(across(mode,
-                                #               ~ if_else(. < 0, 0, .))) |>
-                                left_join(mark_grp_prop |>
-                                            rename(proportion = prop),
-                                          by = c("site_code",
-                                                 "origin", "ad_clip", "cwt", "mark_grp")) |>
-                                select(population,
-                                       site_code,
-                                       origin:mark_grp,
-                                       n_tags:proportion,
-                                       prop_se,
-                                       everything()) |>
-                                # mutate(across(population,
-                                #               factor,
-                                #               levels = levels(tag_summ$group)),
-                                #        across(population,
-                                #               fct_drop)) |>
-                                arrange(population,
-                                        site_code,
-                                        mark_grp) |>
-                                mutate(across(origin,
-                                              fct_recode,
-                                              "Natural" = "W",
-                                              "Hatchery" = "H"),
-                                       across(population,
-                                              factor,
-                                              levels = c('Wenatchee',
-                                                         'Entiat',
-                                                         'Methow',
-                                                         'Okanogan'))) |>
-                                select(population:prop_se,
-                                       estimate = median,
-                                       se,
-                                       lowerCI,
-                                       upperCI)
-
-                              mark_grp_pop_yr <- site_pop_df |>
-                                group_by(population) |>
-                                filter(str_length(path) == min(str_length(path))) |>
-                                ungroup() |>
-                                filter(population %in% c('Wenatchee',
-                                                         'Entiat',
-                                                         'Methow',
-                                                         'Okanogan')) |>
-                                arrange(population,
-                                        site_code) |>
-                                select(population,
-                                       site_code) |>
-                                left_join(mark_grp_yr,
-                                          by = c("population",
-                                                 "site_code"),
-                                          multiple = "all") |>
-                                group_by(population,
-                                         origin,
-                                         ad_clip,
-                                         cwt,
-                                         mark_grp) %>%
-                                summarize(across(c(n_tags, tot_tags,
-                                                   estimate,
-                                                   ends_with("CI")),
-                                                 sum,
-                                                 na.rm = T),
-                                          across(se,
-                                                 ~ sqrt(sum(.^2, na.rm = T))),
-                                          .groups = "drop") |>
-                                group_by(population,
-                                         origin) |>
-                                mutate(tot_tags = sum(n_tags),
-                                       prop = n_tags / tot_tags,
-                                       # using normal approximation
-                                       prop_se = sqrt((prop * (1 - prop))/tot_tags)) |>
-                                ungroup() |>
-                                select(any_of(names(mark_grp_yr)))
-
-                              res_list <- list(tag_summ = tag_summ,
-                                               age_prop_yr = age_prop_yr,
-                                               pop_escp_yr = pop_escp_yr,
-                                               escp_yr = escp_yr,
-                                               detect_yr = detect_yr,
-                                               sex_yr = sex_yr,
-                                               size_yr = size_yr,
-                                               mark_grp_yr = mark_grp_yr,
-                                               mark_grp_pop_yr = mark_grp_pop_yr)
-
-                              rm(age_prop_yr,
-                                 pop_escp_yr,
-                                 escp_yr,
-                                 detect_yr,
-                                 sexed_tags,
-                                 sex_yr,
-                                 mark_grp_yr,
-                                 mark_grp_pop_yr,
-                                 mark_grp_prop,
-                                 mark_post,
-                                 mark_tag_summ,
-                                 site_pop_df,
-                                 prop_samps)
-
-                              return(res_list)
-                            }))
-
-pop_escp <- dabom_est |>
-  mutate(res = map(all_results,
-                   "pop_escp_yr")) |>
+# age proportions
+age_prop <-
+  all_tags |>
+  mutate(res = map(tag_summ,
+                   .f = function(tag_summ) {
+                     tag_summ |>
+                       filter(!group %in% c("Start", "Other")) |>
+                       mutate(across(group,
+                                     recode,
+                                     "BelowPriest" = "Below Priest",
+                                     "WellsPool" = "Wells Pool"),
+                              across(origin,
+                                     recode,
+                                     "H" = "Hatchery",
+                                     "W" = "Natural")) |>
+                       mutate(run_year = year - 1) |>
+                       select(tag_code,
+                              population = group,
+                              origin,
+                              age) |>
+                       left_join(age_table |>
+                                   select(age,
+                                          fresh_water,
+                                          salt_water,
+                                          total_age),
+                                 by = "age") |>
+                       pivot_longer(cols = fresh_water:total_age,
+                                    names_to = "age_type",
+                                    values_to = "age_label") |>
+                       group_by(population,
+                                origin,
+                                age_type) |>
+                       count(age_label) |>
+                       filter(!is.na(age_label)) |>
+                       mutate(sample_size = sum(n),
+                              prop = n / sample_size) |>
+                       ungroup() |>
+                       # add data for all Priest tags
+                       bind_rows(tag_summ |>
+                                   mutate(across(origin,
+                                                 recode,
+                                                 "H" = "Hatchery",
+                                                 "W" = "Natural")) |>
+                                   mutate(run_year = year - 1) |>
+                                   select(tag_code,
+                                          population = group,
+                                          origin,
+                                          age) |>
+                                   left_join(age_table |>
+                                               select(age,
+                                                      fresh_water,
+                                                      salt_water,
+                                                      total_age),
+                                             by = "age") |>
+                                   pivot_longer(cols = fresh_water:total_age,
+                                                names_to = "age_type",
+                                                values_to = "age_label") |>
+                                   group_by(origin,
+                                            age_type) |>
+                                   count(age_label) |>
+                                   filter(!is.na(age_label)) |>
+                                   mutate(sample_size = sum(n),
+                                          prop = n / sample_size) |>
+                                   ungroup() |>
+                                   add_column(population = "Priest Rapids Tags",
+                                              .before = 0))
+                   })) |>
   select(-dam_cnt_name,
-         -all_results) |>
-  unnest(res) |>
-  makeTableNms()
-
-all_escp <- dabom_est |>
-  mutate(res = map(all_results,
-                   "escp_yr")) |>
-  select(-dam_cnt_name,
-         -all_results) |>
-  unnest(res) |>
-  makeTableNms()
-
-detect_df <- dabom_est |>
-  mutate(res = map(all_results,
-                   "detect_yr")) |>
-  select(-dam_cnt_name,
-         -all_results) |>
-  unnest(res) |>
-  makeTableNms()
-
-tag_df <- dabom_est |>
-  mutate(res = map(all_results,
-                   "tag_summ")) |>
-  select(-dam_cnt_name,
-         -all_results) |>
-  unnest(res) |>
-  select(run_year:tag_code,
-         species,
-         record_id,
-         tag_other,
-         sex:age,
-         ad_clip,
-         cwt,
-         trap_date,
-         spawn_node:tag_detects,
-         path) |>
-  makeTableNms()
-
-sex_prop <- dabom_est |>
-  mutate(res = map(all_results,
-                   "sex_yr")) |>
-  select(-dam_cnt_name,
-         -all_results) |>
-  unnest(res) |>
-  makeTableNms()
-
-size_df <- dabom_est |>
-  mutate(res = map(all_results,
-                   "size_yr")) |>
-  select(-dam_cnt_name,
-         -all_results) |>
-  unnest(res) |>
-  mutate(across(
-    population,
-    ~ factor(.,
-             levels = c('Wenatchee',
-                        'Entiat',
-                        'Methow',
-                        'Okanogan',
-                        "Below Priest",
-                        "Wells Pool",
-                        "Priest Rapids Tags"))
-  )) |>
-  arrange(spawn_year,
-          population,
-          origin,
-          salt_water_age)
-
-size_tab <- expand(size_df,
-                   nesting(run_year, spawn_year),
-                   population, origin, salt_water_age) |>
-  left_join(size_df,
-            by = c("run_year",
-                   "spawn_year",
-                   "population",
-                   "origin",
-                   "salt_water_age")) |>
-  mutate(across(salt_water_age,
-                ~ paste0("Salt-", .))) |>
-  rename(Mean = mean,
-         SD = sd,
-         N = n) |>
-  group_by(spawn_year,
-           population,
-           origin) |>
-  mutate(sample_size = sum(N, na.rm = T)) |>
-  ungroup() |>
-  pivot_wider(names_from = salt_water_age,
-              values_from = c(Mean, SD, N),
-              names_glue = "{salt_water_age}_{.value}",
-              names_vary = "slowest") |>
-  makeTableNms()
-
-
-
-age_prop <- dabom_est %>%
-  mutate(res = map(all_results,
-                   "age_prop_yr")) %>%
-  select(-dam_cnt_name,
-         -all_results) %>%
+         -tag_summ) %>%
   unnest(res) |>
   mutate(across(
     population,
@@ -1251,21 +775,684 @@ fw_age_prop <- age_prop |>
               values_fill = 0) |>
   makeTableNms()
 
-
-mark_grp_df <- dabom_est %>%
-  mutate(res = map(all_results,
-                   "mark_grp_yr")) %>%
+# population escapement
+escape_post <-
+  dabom_df |>
+  mutate(post = map2(spawn_year,
+                     dam_cnt_name,
+                     .f = function(yr, dam_nm) {
+                       sroem::query_dabom_results(dabom_dam_nm = dam_nm,
+                                                  query_year = yr,
+                                                  result_type = "escape_post")
+                     }))
+pop_escp <-
+  escape_post |>
+  mutate(pop_est = map(post,
+                       .f = function(x) {
+                         x |>
+                           filter(param %in% c('LWE',
+                                               'ENL',
+                                               'LMR',
+                                               'OKL', 'FST',
+                                               'ICH', 'JD1', 'JDA', 'PRH', 'PRO', 'PRV', 'RSH', 'TMF')) %>%
+                           mutate(param = recode(param,
+                                                 'LWE' = 'Wenatchee',
+                                                 'ENL' = 'Entiat',
+                                                 'LMR' = 'Methow',
+                                                 'OKL' = 'Okanogan',
+                                                 'FST' = 'Okanogan',
+                                                 'ICH' = 'Below Priest',
+                                                 'JD1' = 'Below Priest',
+                                                 'JDA' = 'Below Priest',
+                                                 'PRH' = 'Below Priest',
+                                                 'PRO' = 'Below Priest',
+                                                 'PRV' = 'Below Priest',
+                                                 'RSH' = 'Below Priest',
+                                                 'TMF' = 'Below Priest')) %>%
+                           mutate(param = factor(param,
+                                                 levels = c("Wenatchee",
+                                                            "Entiat",
+                                                            "Methow",
+                                                            "Okanogan",
+                                                            "Below Priest"))) %>%
+                           group_by(chain, iter, origin, param) %>%
+                           summarize(across(escp,
+                                            sum),
+                                     .groups = "drop") %>%
+                           group_by(origin,
+                                    population = param) %>%
+                           summarise(est = median(escp),
+                                     se = sd(escp),
+                                     lci = coda::HPDinterval(coda::as.mcmc(escp))[,1],
+                                     uci = coda::HPDinterval(coda::as.mcmc(escp))[,2],
+                                     .groups = 'drop') %>%
+                           mutate(across(c(est, se, lci),
+                                         ~ if_else(. < 0, 0, .))) %>%
+                           mutate(across(origin,
+                                         recode,
+                                         "H" = "hos",
+                                         "W" = "nos"),
+                                  cv = se / est) %>%
+                           pivot_wider(names_from = origin,
+                                       values_from = c(est, se, lci, uci, cv),
+                                       names_glue = "{origin}_{.value}") %>%
+                           rowwise() |>
+                           mutate(total_escapement = nos_est + hos_est,
+                                  phos = hos_est / (hos_est + nos_est),
+                                  phos_se = deltamethod(~ x1 / (x1 + x2),
+                                                        mean = c(hos_est,
+                                                                 nos_est),
+                                                        cov = diag(c(hos_se,
+                                                                     nos_se)^2))) %>%
+                           ungroup() |>
+                           select(population,
+                                  total_escapement,
+                                  starts_with("nos"),
+                                  starts_with("hos"),
+                                  starts_with("phos"))
+                       })) |>
   select(-dam_cnt_name,
-         -all_results) %>%
-  unnest(res) |>
+         -post) |>
+  unnest(pop_est) |>
   makeTableNms()
 
-mark_grp_pop_df <- dabom_est %>%
-  mutate(res = map(all_results,
-                   "mark_grp_pop_yr")) %>%
-  select(-dam_cnt_name,
-         -all_results) %>%
+
+# all escapement locations
+all_escp <-
+  dabom_df |>
+  mutate(esp_summ = map2(spawn_year,
+                         dam_cnt_name,
+                         .f = function(yr, dam_nm) {
+                           sroem::query_dabom_results(dabom_dam_nm = dam_nm,
+                                                      query_year = yr,
+                                                      result_type = "escape_summ") |>
+                             select(-spawn_year)
+                         })) |>
+  select(-dam_cnt_name) |>
+  unnest(esp_summ) |>
+  mutate(across(origin,
+                recode,
+                "H" = "Hatchery",
+                "W" = "Natural")) %>%
+  select(-c(species,
+            skew,
+            kurtosis)) %>%
+  mutate(across(c(mean:mode,
+                  ends_with("CI")),
+                janitor::round_half_up),
+         across(c(mean:mode,
+                  ends_with("CI")),
+                as.integer)) %>%
+  rename(estimate = median,
+         se = sd) %>%
+  select(-mean, -mode) |>
+  # how many tags went past each location?
+  left_join(all_tags |>
+              select(-dam_cnt_name),
+            by = join_by(run_year,
+                         spawn_year)) |>
+  mutate(n_tags = map2(location,
+                       tag_summ,
+                       .f = function(x, y) {
+                         if(x == "PRA_bb") {
+                           n_tags <-
+                             y |>
+                             group_by(tag_origin = origin) |>
+                             summarize(n_tags = n_distinct(tag_code))
+                         } else {
+                           n_tags <-
+                             y |>
+                             group_by(tag_origin = origin) |>
+                             summarize(n_tags = n_distinct(tag_code[str_detect(path, paste0(" ", str_remove(x, "_bb$")))]))
+                         }
+                         return(n_tags)
+                       })) |>
+  unnest(n_tags) |>
+  mutate(across(tag_origin,
+                recode,
+                "H" = "Hatchery",
+                "W" = "Natural")) %>%
+  filter(origin == tag_origin) |>
+  select(-tag_summ,
+         -tag_origin) |>
+  relocate(n_tags,
+           .before = estimate) |>
+  # make some 0s into NAs
+  mutate(
+    across(
+      c(estimate:upperCI),
+      ~ if_else(n_tags == 0 & estimate == 0, NA_real_, .)
+    )
+  ) |>
+  makeTableNms()
+
+# tag summaries
+tag_df <- all_tags |>
+  select(-dam_cnt_name) |>
+  unnest(tag_summ) |>
+  select(run_year:tag_code,
+         species,
+         record_id,
+         tag_other,
+         sex:age,
+         ad_clip,
+         cwt,
+         trap_date,
+         spawn_node:tag_detects,
+         path) |>
+  makeTableNms()
+
+# detection probabilities
+detect_df <-
+  dabom_df |>
+  mutate(res = map2(spawn_year,
+                    dam_cnt_name,
+                    .f = function(yr, dam_nm) {
+                      query_dabom_results(dabom_dam_nm = dam_nm,
+                                          query_year = yr,
+                                          result_type = "detect_summ")
+                    })) |>
+  select(-dam_cnt_name) |>
   unnest(res) |>
+  select(-c(mean,
+            mode)) |>
+  rename(estimate = median,
+         se = sd) |>
+  # mutate(
+  #   across(
+  #     node,
+  #     ~ str_replace(., "B0$", "_D")),
+  #   across(
+  #     node,
+  #     ~ if_else(nchar(.) > 3,
+  #               str_replace(., "A0$", "_U"),
+  #               .))
+  # ) |>
+  makeTableNms()
+
+sexed_tags <-
+  all_tags |>
+  select(-dam_cnt_name) |>
+  unnest(tag_summ) |>
+  filter(group %in% c("Wenatchee",
+                      "Entiat",
+                      "Methow",
+                      "Okanogan",
+                      "BelowPriest")) %>%
+  mutate(across(group,
+                fct_recode,
+                "Below Priest" = "BelowPriest"),
+         across(group,
+                fct_drop)) %>%
+  bind_rows(all_tags |>
+              select(-dam_cnt_name) |>
+              unnest(tag_summ) |>
+              mutate(group = factor("Priest Rapids Tags"))) %>%
+  group_by(run_year,
+           spawn_year,
+           population = group,
+           origin,
+           sex) %>%
+  summarise(n_tags = n_distinct(tag_code[!is.na(sex)]),
+            .groups = "drop") %>%
+  filter(!is.na(sex)) %>%
+  full_join(expand(.,
+                   nesting(run_year,
+                           spawn_year),
+                   population,
+                   origin,
+                   sex),
+            by = join_by(run_year,
+                         spawn_year,
+                         population,
+                         origin,
+                         sex)) %>%
+  mutate(across(n_tags,
+                ~ replace_na(.,
+                             0)))
+
+# sex proportions and escapement
+sex_prop <- sexed_tags %>%
+  bind_rows(sexed_tags %>%
+              group_by(run_year,
+                       spawn_year,
+                       population,
+                       sex) %>%
+              summarize(across(n_tags,
+                               sum),
+                        .groups = "drop") %>%
+              mutate(origin = "All")) %>%
+  mutate(origin = factor(origin,
+                         levels = c("W", "H", "All")),
+         across(origin,
+                fct_recode,
+                "Natural" = "W",
+                "Hatchery" = "H")) %>%
+  mutate(group = paste(spawn_year, population, origin, sep = "_")) %>%
+  arrange(spawn_year, population, origin, sex) %>%
+  group_by(group) %>%
+  mutate(total_sexed = sum(n_tags)) %>%
+  mutate(prop = n_tags / total_sexed,
+         prop_se = sqrt((prop * (1 - prop)) / total_sexed)) %>%
+  ungroup() %>%
+  left_join(pop_escp %>%
+              clean_names() |>
+              select(-starts_with("p_hos")) |>
+              rename(total_est = total_escapement) %>%
+              rowwise() %>%
+              mutate(total_se = sqrt(sum(c(nos_se,
+                                           hos_se)^2))) %>%
+              ungroup() %>%
+              select(spawn_year,
+                     population,
+                     ends_with("est"),
+                     ends_with("se")) %>%
+              pivot_longer(c(ends_with("est"),
+                             ends_with("se"))) %>%
+              mutate(type = if_else(str_detect(name, "_se$"),
+                                    "se",
+                                    "est"),
+                     origin = str_split(name, "_", simplify = T)[,1],
+                     across(origin,
+                            recode,
+                            "total" = "All",
+                            "nos" = "Natural",
+                            "hos" = "Hatchery")) %>%
+              select(-name) %>%
+              pivot_wider(names_from = type,
+                          values_from = value),
+            by = join_by(spawn_year,
+                         population,
+                         origin)) %>%
+  rowwise() %>%
+  mutate(across(est,
+                ~ . * prop),
+         se = deltamethod(~ x1 * x2,
+                          mean = c(est, prop),
+                          cov = diag(c(se, prop_se)^2))) %>%
+  ungroup() %>%
+  select(run_year,
+         spawn_year,
+         population,
+         origin,
+         sex,
+         n_tags,
+         total_sexed,
+         starts_with("prop"),
+         escp = est,
+         escp_se = se) |>
+  makeTableNms()
+
+# size table
+size_df <-
+  all_tags |>
+  select(-dam_cnt_name) |>
+  unnest(tag_summ) |>
+  filter(!group %in% c("Start", "Other")) |>
+  mutate(across(group,
+                fct_drop)) |>
+  mutate(across(group,
+                recode,
+                "BelowPriest" = "Below Priest",
+                "WellsPool" = "Wells Pool"),
+         across(origin,
+                recode,
+                "H" = "Hatchery",
+                "W" = "Natural")) |>
+  select(run_year,
+         spawn_year,
+         tag_code,
+         population = group,
+         origin,
+         age,
+         fork_length) |>
+  left_join(age_table |>
+              select(age,
+                     salt_water),
+            by = "age") |>
+  filter(!is.na(fork_length),
+         !is.na(salt_water)) |>
+  group_by(run_year,
+           spawn_year,
+           population,
+           origin,
+           salt_water) |>
+  summarize(across(fork_length,
+                   list(mean = mean,
+                        sd = sd,
+                        n = length),
+                   .names = "{.fn}"),
+            .groups = "drop") %>%
+  rename(salt_water_age = salt_water) |>
+  # add data for all Priest Rapids tags
+  bind_rows(all_tags |>
+              select(-dam_cnt_name) |>
+              unnest(tag_summ) |>
+              mutate(across(origin,
+                            recode,
+                            "H" = "Hatchery",
+                            "W" = "Natural")) |>
+              select(run_year,
+                     spawn_year,
+                     tag_code,
+                     origin,
+                     age,
+                     fork_length) |>
+              left_join(age_table |>
+                          select(age,
+                                 salt_water),
+                        by = "age") |>
+              filter(!is.na(fork_length),
+                     !is.na(salt_water)) |>
+              group_by(origin,
+                       salt_water) |>
+              summarize(across(fork_length,
+                               list(mean = mean,
+                                    sd = sd,
+                                    n = length),
+                               .names = "{.fn}"),
+                        .groups = "drop") %>%
+              rename(salt_water_age = salt_water) |>
+              add_column(population = "Priest Rapids Tags",
+                         .before = 0))
+
+size_tab <- expand(size_df,
+                   nesting(run_year, spawn_year),
+                   population, origin, salt_water_age) |>
+  left_join(size_df,
+            by = c("run_year",
+                   "spawn_year",
+                   "population",
+                   "origin",
+                   "salt_water_age")) |>
+  mutate(across(salt_water_age,
+                ~ paste0("Salt-", .))) |>
+  rename(Mean = mean,
+         SD = sd,
+         N = n) |>
+  group_by(spawn_year,
+           population,
+           origin) |>
+  mutate(sample_size = sum(N, na.rm = T)) |>
+  ungroup() |>
+  pivot_wider(names_from = salt_water_age,
+              values_from = c(Mean, SD, N),
+              names_glue = "{salt_water_age}_{.value}",
+              names_vary = "slowest") |>
+  makeTableNms()
+
+# proportions / escapement of mark groups, by population
+mark_tag_summ <-
+  all_tags |>
+  select(-dam_cnt_name) |>
+  unnest(tag_summ) |>
+  mutate(cwt = if_else(is.na(cwt), F,
+                       if_else(cwt %in% c("SN", "BD"),
+                               T, NA)),
+         ad_clip = if_else(is.na(ad_clip) | origin == "W",
+                           F,
+                           if_else(ad_clip == "AD", T, NA))) |>
+  mutate(ad_clip_chr = recode(as.character(ad_clip),
+                              "TRUE" = "AD",
+                              "FALSE" = "AI"),
+         cwt_chr = recode(as.character(cwt),
+                          "TRUE" = "CWT",
+                          "FALSE" = "noCWT")) |>
+  tidyr::unite("mark_grp", ad_clip_chr, cwt_chr, remove = T) |>
+  mutate(mark_grp = if_else(origin == "W",
+                            "Wild",
+                            mark_grp))
+
+
+mark_tag_summ |>
+  select(run_year:spawn_node,
+         ad_clip,
+         cwt,
+         group,
+         mark_grp)
+
+# proportions of each type of fish (H/W, Ad-clip, CWT combinations) past each site
+
+# get the latest parent child table
+parent_child <-
+  dabom_df |>
+  filter(spawn_year == max(spawn_year)) |>
+  mutate(pc = map2(spawn_year,
+                   dam_cnt_name,
+                   .f = function(yr, dam) {
+                     query_dabom_results(dabom_dam_nm = dam,
+                                         query_year = yr,
+                                         result_type = "parent_child")
+                   })) |>
+  select(pc) |>
+  unnest(pc)
+
+# determine which group/population each site is in
+site_pop_df = buildNodeOrder(parent_child) |>
+  mutate(group = if_else(node == "PRA",
+                         "Start",
+                         if_else(str_detect(path, 'LWE'), #| node %in% c("CLK"),
+                                 "Wenatchee",
+                                 if_else(str_detect(path, "ENL"),
+                                         "Entiat",
+                                         if_else(str_detect(path, "LMR"),
+                                                 "Methow",
+                                                 if_else(str_detect(path, "OKL") | node %in% c("FST"),
+                                                         "Okanogan",
+                                                         if_else(str_detect(path, "RIA", negate = T) & str_length(path > 3),
+                                                                 "BelowPriest",
+                                                                 if_else(node == "WEA",
+                                                                         "WellsPool",
+                                                                         "Other")))))))) |>
+  mutate(group = factor(group,
+                        levels = c("Wenatchee",
+                                   "Entiat",
+                                   "Methow",
+                                   "Okanogan",
+                                   "BelowPriest",
+                                   "WellsPool",
+                                   "Start",
+                                   "Other"))) |>
+  rename(site_code = node,
+         site_order = node_order,
+         population = group)
+
+mark_grp_prop = mark_tag_summ |>
+  mutate(spawn_site = str_remove(spawn_node, "B0$"),
+         spawn_site = str_remove(spawn_site, "A0$"),
+         spawn_site = recode(spawn_site,
+                             "S" = "SA0")) |>
+  left_join(site_pop_df |>
+              select(end_loc = site_code,
+                     population,
+                     path) |>
+              separate(path,
+                       into = paste("site", 1:8, sep = "_")) |>
+              pivot_longer(starts_with('site_'),
+                           names_to = "node_order",
+                           values_to = "site_code") |>
+              filter(!is.na(site_code)) |>
+              select(-node_order),
+            by = c("spawn_site" = "end_loc"),
+            relationship = "many-to-many") |>
+  group_by(run_year,
+           spawn_year,
+           origin,
+           population = group,
+           site_code, ad_clip, cwt, mark_grp) |>
+  summarise(n_tags = n_distinct(tag_code),
+            .groups = "drop") |>
+  right_join(crossing(site_code = union(parent_child$parent, parent_child$child),
+                      expand(mark_tag_summ,
+                             nesting(run_year, spawn_year),
+                             nesting(origin, ad_clip, cwt, mark_grp))) |>
+               left_join(site_pop_df |>
+                           select(site_code,
+                                  population),
+                         by = "site_code") |>
+               relocate(population, .after = 1),
+             by = c("run_year", "spawn_year",
+                    "origin", "population", "site_code", "ad_clip", "cwt", "mark_grp")) |>
+  arrange(spawn_year, site_code, mark_grp) |>
+  mutate(across(n_tags,
+                ~ replace_na(.,
+                             0))) |>
+  group_by(run_year,
+           spawn_year,
+           origin,
+           site_code) |>
+  mutate(tot_tags = sum(n_tags),
+         prop = n_tags / tot_tags,
+         # using normal approximation
+         prop_se = sqrt((prop * (1 - prop))/tot_tags)) |>
+  ungroup() |>
+  arrange(spawn_year,
+          population,
+          site_code,
+          origin,
+          ad_clip,
+          cwt)
+
+# generate posterior samples of mark proportions
+escape_post2 <- escape_post |>
+  select(spawn_year,
+         post) |>
+  unnest(post) |>
+  group_by(spawn_year) |>
+  mutate(n_iter = max(iter),
+         iter = (chain - 1) * n_iter + iter) |>
+  ungroup()
+n_iter = max(escape_post2$iter)
+
+
+set.seed(6)
+prop_samps = mark_grp_prop |>
+  filter(tot_tags > 0,
+         prop > 0,
+         prop < 1) |>
+  nest(data = -c(run_year,
+                 spawn_year,
+                 origin,
+                 population,
+                 site_code,
+                 tot_tags)) |>
+  mutate(samp = map(data,
+                    .f = function(x) {
+                      rmultinom(n_iter, sum(x$n_tags), x$prop) |>
+                        set_colnames(1:n_iter) |>
+                        set_rownames(x$mark_grp) |>
+                        as_tibble(rownames = 'mark_grp') |>
+                        pivot_longer(-1,
+                                     names_to = "iter",
+                                     values_to = "n_tags") |>
+                        mutate(across(iter,
+                                      as.integer)) |>
+                        group_by(iter) |>
+                        mutate(prop = n_tags / sum(n_tags)) |>
+                        arrange(iter, mark_grp) |>
+                        ungroup()
+                    })) |>
+  select(-data) |>
+  unnest(samp) |>
+  mutate(ad_clip = if_else(str_detect(mark_grp, "^AD"), T, F),
+         cwt = if_else(str_detect(mark_grp, "_CWT"), T, F)) |>
+  relocate(ad_clip,
+           cwt,
+           .before = mark_grp) |>
+  bind_rows(mark_grp_prop |>
+              filter(tot_tags == 0 |
+                       prop == 0 |
+                       prop == 1) |>
+              crossing(iter = 1:n_iter) |>
+              select(-prop_se)) |>
+  arrange(spawn_year,
+          population,
+          site_code,
+          iter,
+          origin, mark_grp) |>
+  select(iter, any_of(names(mark_grp_prop)))
+
+# posterior samples
+mark_post = escape_post2 |>
+  select(-n_iter) |>
+  inner_join(prop_samps,
+             by = c("spawn_year",
+                    "iter", "origin",
+                    "param" = "site_code"),
+             multiple = "all") %>%
+  mutate(across(c(prop,
+                  n_tags,
+                  tot_tags),
+                replace_na,
+                0)) |>
+  mutate(prop = if_else(value == 0,
+                        0,
+                        prop)) |>
+  mutate(n_fish = escp * prop)
+
+mark_grp_df <-
+  mark_post |>
+  group_by(run_year,
+           spawn_year,
+           population,
+           site_code = param,
+           origin,
+           ad_clip,
+           cwt,
+           mark_grp) |>
+  summarise(across(n_fish,
+                   list(mean = mean,
+                        median = median,
+                        se = sd,
+                        skew = moments::skewness,
+                        kurtosis = moments::kurtosis,
+                        lowerCI = ~ coda::HPDinterval(coda::as.mcmc(.x))[,1],
+                        upperCI = ~ coda::HPDinterval(coda::as.mcmc(.x))[,2]),
+                   .names = "{.fn}"),
+            .groups = "drop") |>
+  left_join(mark_grp_prop |>
+              rename(proportion = prop)) |>
+  select(population,
+         site_code,
+         origin:mark_grp,
+         n_tags:proportion,
+         prop_se,
+         everything()) |>
+  arrange(population,
+          site_code,
+          mark_grp) |>
+  mutate(across(origin,
+                ~ fct_recode(.,
+                             "Natural" = "W",
+                             "Hatchery" = "H")),
+         across(population,
+                ~ factor(.,
+                         levels = c('Wenatchee',
+                                    'Entiat',
+                                    'Methow',
+                                    'Okanogan')))) |>
+  arrange(spawn_year,
+          population,
+          site_code,
+          mark_grp) |>
+  select(run_year,
+         spawn_year,
+         population:prop_se,
+         estimate = median,
+         se,
+         lowerCI,
+         upperCI)
+
+mark_grp_pop_df <- mark_grp_df |>
+  filter(site_code %in% c("LWE",
+                          "ENL",
+                          "LMR",
+                          "OKL")) |>
+  select(-site_code) |>
+  makeTableNms()
+
+mark_grp_df <-
+  mark_grp_df |>
   makeTableNms()
 
 #-----------------------------------------------------------------
@@ -1293,9 +1480,9 @@ read_excel(paste0("T:/DFW-Team FP Upper Columbia Escapement - General/",
   distinct() |>
   filter(tag_code %in% tag_code[duplicated(tag_code)]) |>
   arrange(tag_code) #|>
-  inner_join(tag_df |>
-               clean_names() |>
-               select(tag_code))
+inner_join(tag_df |>
+             clean_names() |>
+             select(tag_code))
 
 # estimate error rate for each sex
 sex_err_rate <- tag_df |>
@@ -1344,12 +1531,15 @@ sex_err_rate <- tag_df |>
            .after = "perc_false")
 
 # re-calculate proportion of each sex in each population each year
-sex_prop <- dabom_est |>
-  mutate(res = map(all_results,
-                   "sex_yr")) |>
-  select(-dam_cnt_name,
-         -all_results) |>
-  unnest(res) |>
+sex_prop <-
+  sex_prop |>
+  clean_names() |>
+  # dabom_est |>
+  # mutate(res = map(all_results,
+  #                  "sex_yr")) |>
+  # select(-dam_cnt_name,
+  #        -all_results) |>
+  # unnest(res) |>
   mutate(across(origin,
                 as_factor)) |>
   select(run_year:total_sexed) |>
@@ -1491,38 +1681,36 @@ sex_prop <- dabom_est |>
 
 #-----------------------------------------------------------------
 # generate table of escapement estimates at Priest
-priest_df = tibble(spawn_year = 2011:max_yr) |>
+priest_df <-
+  dabom_df |>
+  select(run_year,
+         spawn_year) |>
   mutate(prd_df = map(spawn_year,
                       .f = function(yr) {
-                        # load data
-                        load(here("analysis/data/derived_data/estimates",
-                                  "PriestRapids",
-                                  paste0("UC_Sthd_DABOM_", yr, ".rda")))
-
-                        tag_num <- bio_df |>
-                          group_by(origin) |>
-                          summarize(n_tags = n_distinct(tag_code),
-                                    .groups = "drop") |>
-                          mutate(total_tags = sum(n_tags))
-
-                        res <- dam_escp_df |>
+                        query_dabom_results(dabom_dam_nm = "PriestRapids",
+                                            query_year = yr,
+                                            result_type = "dam_summ") |>
                           filter(dam == "PriestRapids") |>
-                          mutate(run_year = year - 1) |>
-                          select(run_year,
-                                 # spawn_year = year,
-                                 win_cnt,
+                          select(win_cnt,
                                  origin,
                                  contains("reasc_rate"),
-                                 contains("priest_cnt")) |>
+                                 contains("priest_cnt"),
+                                 ) |>
                           mutate(total = sum(priest_cnt),
-                                 total_se = sqrt(sum(priest_cnt_se^2))) |>
-                          left_join(tag_num,
-                                    by = "origin")
-                        return(res)
+                                 total_se = sqrt(sum(priest_cnt_se^2)))
                       })) |>
   unnest(prd_df) |>
-  relocate(run_year,
-           .before = 1) |>
+  left_join(tag_df |>
+              clean_names() |>
+              group_by(run_year,
+                       spawn_year,
+                       origin) |>
+              summarize(n_tags = n_distinct(tag_code),
+                        .groups = "drop") |>
+              group_by(run_year,
+                       spawn_year) |>
+              mutate(total_tags = sum(n_tags)) |>
+              ungroup()) |>
   mutate(across(origin,
                 recode,
                 "H" = "Hatchery",
@@ -1534,59 +1722,62 @@ priest_df = tibble(spawn_year = 2011:max_yr) |>
          `Priest Est` = `Priest Cnt`,
          `Priest SE` = `Priest Cnt SE`)
 
-
 # now a table for years when Rock Island was used
-rock_isl_df = priest_df |>
-  select(run_year = `Run Year`,
-         spawn_year = `Spawn Year`) |>
-  filter(!spawn_year %in% c(2011:2015, 2018)) |>
-  distinct() |>
-  mutate(ria_df = map(spawn_year,
+rock_isl_df <-
+  dabom_df |>
+  filter(dam_cnt_name == "RockIsland") |>
+  select(run_year,
+         spawn_year) |>
+  mutate(prd_df = map(spawn_year,
                       .f = function(yr) {
-                        # load data
-                        load(here("analysis/data/derived_data/estimates",
-                                  "RockIsland",
-                                  paste0("UC_Sthd_DABOM_", yr, ".rda")))
-
-                        res <- dam_escp_df |>
+                        query_dabom_results(dabom_dam_nm = "RockIsland",
+                                            query_year = yr,
+                                            result_type = "dam_summ") |>
                           filter(dam == "RockIsland") |>
                           select(origin,
-                                 #contains("reasc_rate"),
+                                 dam,
+                                 # contains("reasc_rate"),
                                  contains("priest_cnt"),
-                                 dam) |>
+                          ) |>
                           mutate(total = sum(priest_cnt),
-                                 total_se = sqrt(sum(priest_cnt_se^2))) |>
-                          relocate(dam,
-                                   .after = "total_se")
-                        return(res)
+                                 total_se = sqrt(sum(priest_cnt_se^2)))
                       })) |>
-  unnest(ria_df) |>
+  unnest(prd_df) |>
+  # left_join(tag_df |>
+  #             clean_names() |>
+  #             group_by(run_year,
+  #                      spawn_year,
+  #                      origin) |>
+  #             summarize(n_tags = n_distinct(tag_code),
+  #                       .groups = "drop") |>
+  #             group_by(run_year,
+  #                      spawn_year) |>
+  #             mutate(total_tags = sum(n_tags)) |>
+  #             ungroup()) |>
   mutate(across(origin,
-                recode,
+                ~ recode(.,
                 "H" = "Hatchery",
-                "W" = "Natural"),
+                "W" = "Natural")),
          across(dam,
-                recode,
-                "RockIsland" = "Rock Island")) |>
+                ~ recode(.,
+                         "RockIsland" = "Rock Island"))) |>
   makeTableNms() |>
-  rename(#`PRD Ladder Count` = `Win Cnt`,
-    # `Adult Reascension Adjustment Rate` = `Reasc Rate`,
-    # `Reascension Rate SE` = `Reasc Rate_se`,
+  rename(
     `Modelled Priest Est` = `Priest Cnt`,
     `Modelled Priest SE` = `Priest Cnt SE`,
     `Modelled Total` = Total,
     `Modelled Total SE` = `Total SE`,
     `Dam Method` = Dam)
 
-
 dam_cnt_tab <- priest_df |>
   left_join(rock_isl_df,
             by = c("Run Year",
                    "Spawn Year",
                    "Origin")) |>
-  relocate(c(`N Tags`,
+  relocate(c(`Dam Method`,
+             `N Tags`,
              `Total Tags`),
-           .after = "Dam Method") |>
+           .after = "Modelled Total SE") |>
   mutate(`Tag Rate` = if_else(is.na(`Dam Method`),
                               `N Tags` / `Priest Est`,
                               `N Tags` / `Modelled Priest Est`),
@@ -1624,7 +1815,7 @@ save_list <- list(
     bind_rows(pop_escp |>
                 filter(Population == "Entiat") |>
                 rename(`Total Spawners` = `Total Escapement`) |>
-                mutate(Stream = as.factor("Total")) |>
+                mutate(River = as.factor("Total")) |>
                 rowwise() |>
                 mutate(`pHOS SE` = deltamethod(~ x1 / (x1 + x2),
                                                mean = c(`HOS Est`,
@@ -1637,16 +1828,21 @@ save_list <- list(
                               levels = levels(pop_escp$Population)))) |>
     arrange(`Spawn Year`,
             Population,
-            Stream) |>
+            River) |>
     mutate(across(ends_with("Year"),
                   as.integer),
            across(c(`Total Spawners`,
-                    ends_with("Est")),
+                    ends_with("Est"),
+                    ends_with("CI")),
                   round_half_up)) |>
-    mutate(`Total Spawners` = `NOS Est` + `HOS Est`) |>
+    # mutate(`Total Spawners` = `NOS Est` + `HOS Est`) |>
     mutate(across(where(is.double),
                   round,
-                  digits = 3)),
+                  digits = 3),
+           across(c(`NOS SE`,
+                    `HOS SE`),
+                  round,
+                  digits = 2)),
 
   "Run Escp All Locations" = all_escp |>
     mutate(across(ends_with("Year"),
@@ -1748,7 +1944,7 @@ save_list <- list(
 write_xlsx(x = save_list,
            path = paste0("T:/DFW-Team FP Upper Columbia Escapement - General/",
                          "UC_Sthd/Estimates/",
-                         "UC_STHD_Model_Output.xlsx"))
+                         "UC_STHD_Model_Output_v2.xlsx"))
 
 #--------------------------------------------------------------
 # read in previous estimates, add latest year to them
