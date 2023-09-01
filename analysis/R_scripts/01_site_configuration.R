@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: Develop configuration file for DABOM
 # Created: 4/1/20
-# Last Modified: 12/19/22
+# Last Modified: 8/30/23
 # Notes:
 #
 # # install some needed packages
@@ -299,9 +299,10 @@ configuration = org_config %>%
 
 # get spatial object of sites used in model
 sites_sf = writeOldNetworks()$PriestRapids %>%
-  mutate(across(c(SiteID, Step3),
-                recode,
-                "BelowJD1" = "JDA"),
+  mutate(across(c(SiteID,
+                  Step3),
+                ~ recode(.,
+                         "BelowJD1" = "JDA")),
          path = str_replace(path, "BelowJD1", "JDA")) %>%
   rename(site_code = SiteID) %>%
   # add a few sites in the Okanogan region
@@ -394,7 +395,7 @@ ggplot() +
   #         fill = NA,
   #         lwd = 2) +
   geom_sf(data = sites_sf,
-          size = 4,
+          size = 3,
           color = "black") +
   # geom_sf_label(data = sites_sf,
   #               size = 1.5,
@@ -416,6 +417,10 @@ ggplot() +
   theme_bw() +
   theme(axis.title = element_blank())
 
+ggsave(here('analysis/figures',
+            "DABOM_site_map.pdf"),
+       width = 8,
+       height = 11)
 
 #-----------------------------------------------------------------
 # build parent child table
@@ -502,8 +507,8 @@ parent_child %<>%
 
 sites_df = writeOldNetworks()$PriestRapids %>%
   mutate(across(c(SiteID, Step3),
-                recode,
-                "BelowJD1" = "JDA"),
+                ~ recode(.,
+                         "BelowJD1" = "JDA")),
          path = str_replace(path, "BelowJD1", "JDA")) %>%
   rename(site_code = SiteID)
 
@@ -638,11 +643,11 @@ ggsave(here("analysis/figures",
             "PriestRapids_DABOM_sites.pdf"),
        node_p,
        width = 9,
-       height = 6)
+       height = 5)
 
 # save as png
 ggsave(here("analysis/figures",
             "PriestRapids_DABOM_sites.png"),
        node_p,
        width = 9,
-       height = 6)
+       height = 5)
