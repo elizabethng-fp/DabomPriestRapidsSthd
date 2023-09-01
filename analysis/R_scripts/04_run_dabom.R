@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: prep and run DABOM
 # Created: 4/1/20
-# Last Modified: 11/7/2022
+# Last Modified: 8/30/23
 # Notes:
 
 #-----------------------------------------------------------------
@@ -24,99 +24,99 @@ load(here('analysis/data/derived_data/site_config.rda'))
 # set year
 yr = 2022
 
-# for(yr in 2011:2019) {
-#   cat(paste("Working on", yr, "\n\n"))
+# for(yr in 2011:2022) {
+  cat(paste("Working on", yr, "\n\n"))
 
-# # load and filter biological data
-# bio_df = read_rds(here('analysis/data/derived_data',
-#                        'Bio_Data_2011_2021.rds')) %>%
-#   filter(year == yr)
+  # load and filter biological data
+  bio_df = read_rds(here('analysis/data/derived_data',
+                         'Bio_Data_2011_2022.rds')) %>%
+    filter(year == yr)
 
-# load processed detection histories
-load(here('analysis/data/derived_data/PITcleanr',
-          paste0('UC_Steelhead_', yr, '.rda')))
+  # load processed detection histories
+  load(here('analysis/data/derived_data/PITcleanr',
+            paste0('UC_Steelhead_', yr, '.rda')))
 
-# filter to keep only the observations you want to keep
-filter_obs = prepped_ch %>%
-  mutate(user_keep_obs = if_else(is.na(user_keep_obs),
-                                 auto_keep_obs,
-                                 user_keep_obs)) %>%
-  filter(user_keep_obs)
-
-
-# determine origin of each fish
-fish_origin = bio_df %>%
-  filter(tag_code %in% unique(filter_obs$tag_code)) %>%
-  select(tag_code, origin) %>%
-  distinct()
-
-# file path to the default and initial model
-basic_modNm = here('analysis/model_files', "PRA_DABOM.txt")
-
-writeDABOM(file_name = basic_modNm,
-           parent_child = parent_child,
-           configuration = configuration,
-           time_varying = F)
-
-#------------------------------------------------------------------------------
-# Alter default model code for species and year of
-# interest; sets prior for some detection node efficiencies at 0 or 100%
-# based on actual tag detection data; 0% if no tags were seen
-#------------------------------------------------------------------------------
-
-# filepath for specific JAGS model code for species and year
-mod_path = here('analysis/model_files',
-                paste0('PRA_Steelhead_', yr, '.txt'))
-
-# writes species and year specific jags code
-fixNoFishNodes(init_file = basic_modNm,
-               file_name = mod_path,
-               filter_ch = filter_obs,
-               parent_child = parent_child,
-               configuration = configuration,
-               fish_origin = fish_origin)
-
-#------------------------------------------------------------------------------
-# Creates a function to spit out initial values for MCMC chains
-init_fnc = setInitialValues(filter_obs,
-                            parent_child,
-                            configuration)
-
-# Create all the input data for the JAGS model
-jags_data = createJAGSinputs(filter_ch = filter_obs,
-                             parent_child = parent_child,
-                             configuration = configuration,
-                             fish_origin = fish_origin)
-
-# Tell JAGS which parameters in the model that it should save.
-jags_params = setSavedParams(model_file = mod_path,
-                             time_varying = F)
+  # filter to keep only the observations you want to keep
+  filter_obs = prepped_ch %>%
+    mutate(user_keep_obs = if_else(is.na(user_keep_obs),
+                                   auto_keep_obs,
+                                   user_keep_obs)) %>%
+    filter(user_keep_obs)
 
 
-# run the model
-jags = jags.model(mod_path,
-                  data = jags_data,
-                  inits = init_fnc,
-                  # n.chains = 1,
-                  # n.adapt = 5)
-                  n.chains = 4,
-                  n.adapt = 5000)
+  # determine origin of each fish
+  fish_origin = bio_df %>%
+    filter(tag_code %in% unique(filter_obs$tag_code)) %>%
+    select(tag_code, origin) %>%
+    distinct()
+
+  # file path to the default and initial model
+  basic_modNm = here('analysis/model_files', "PRA_DABOM.txt")
+
+  writeDABOM(file_name = basic_modNm,
+             parent_child = parent_child,
+             configuration = configuration,
+             time_varying = F)
+
+  #------------------------------------------------------------------------------
+  # Alter default model code for species and year of
+  # interest; sets prior for some detection node efficiencies at 0 or 100%
+  # based on actual tag detection data; 0% if no tags were seen
+  #------------------------------------------------------------------------------
+
+  # filepath for specific JAGS model code for species and year
+  mod_path = here('analysis/model_files',
+                  paste0('PRA_Steelhead_', yr, '.txt'))
+
+  # writes species and year specific jags code
+  fixNoFishNodes(init_file = basic_modNm,
+                 file_name = mod_path,
+                 filter_ch = filter_obs,
+                 parent_child = parent_child,
+                 configuration = configuration,
+                 fish_origin = fish_origin)
+
+  #------------------------------------------------------------------------------
+  # Creates a function to spit out initial values for MCMC chains
+  init_fnc = setInitialValues(filter_obs,
+                              parent_child,
+                              configuration)
+
+  # Create all the input data for the JAGS model
+  jags_data = createJAGSinputs(filter_ch = filter_obs,
+                               parent_child = parent_child,
+                               configuration = configuration,
+                               fish_origin = fish_origin)
+
+  # Tell JAGS which parameters in the model that it should save.
+  jags_params = setSavedParams(model_file = mod_path,
+                               time_varying = F)
 
 
-#--------------------------------------
-# test the MCMC outcome and summary functions
-dabom_mod = coda.samples(jags,
-                         jags_params,
-                         # n.iter = 10)
-                         n.iter = 5000,
-                         thin = 10)
+  # run the model
+  jags = jags.model(mod_path,
+                    data = jags_data,
+                    inits = init_fnc,
+                    # n.chains = 1,
+                    # n.adapt = 5)
+                    n.chains = 4,
+                    n.adapt = 10000)
 
 
-save(dabom_mod, jags_data, filter_obs, bio_df,
-     file = here("analysis/data/derived_data/model_fits",
-                 paste0('PRA_DABOM_Steelhead_', yr,'.rda')))
+  #--------------------------------------
+  # test the MCMC outcome and summary functions
+  dabom_mod = coda.samples(jags,
+                           jags_params,
+                           # n.iter = 10)
+                           n.iter = 5000,
+                           thin = 10)
 
-# rm(dabom_mod, jags_data, filter_obs)
+
+  save(dabom_mod, jags_data, filter_obs, bio_df,
+       file = here("analysis/data/derived_data/model_fits",
+                   paste0('PRA_DABOM_Steelhead_', yr,'.rda')))
+
+#   rm(dabom_mod, jags_data, filter_obs)
 # }
 
 #------------------------------------------------------------------------------
