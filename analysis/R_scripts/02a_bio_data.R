@@ -47,36 +47,38 @@ library(here)
 #                         })) |>
 #   unnest(tag_data)
 
+#-----------------------------------------------------------------
 # one file for 2011 - 2023
-sthd_tags <-
-  read_csv(here("analysis/data/raw_data",
-                "tagging_recapture",
-                "Priest Tagging Detail 2011-2023.csv"),
-           show_col_types = FALSE) |>
-  clean_names() |>
-  mutate(across(contains("_date_"),
-                mdy)) |>
-  add_column(type = "mark",
-             .before = 0) |>
-  bind_rows(read_csv(here("analysis/data/raw_data",
-                          "tagging_recapture",
-                          "Priest Recapture Detail 2011-2023.csv"),
-                     show_col_types = FALSE) |>
-              clean_names() |>
-              mutate(across(contains("_date_"),
-                            mdy)) |>
-              add_column(type = "recap",
-                         .before = 0)) |>
-  mutate(spawn_year = if_else(type == "mark",
-                              if_else(month(release_date_mmddyyyy) < 7,
-                                      year(release_date_mmddyyyy),
-                                      year(release_date_mmddyyyy) + 1),
-                              if_else(month(recap_date_mmddyyyy) < 7,
-                                      year(recap_date_mmddyyyy),
-                                      year(recap_date_mmddyyyy) + 1))) |>
-  relocate(spawn_year,
-           .before = 0)
 
+# uses tagging detail report and recapture detail report
+# sthd_tags <-
+#   read_csv(here("analysis/data/raw_data",
+#                 "tagging_recapture",
+#                 "Priest Tagging Detail 2011-2023.csv"),
+#            show_col_types = FALSE) |>
+#   clean_names() |>
+#   mutate(across(contains("_date_"),
+#                 mdy)) |>
+#   add_column(type = "mark",
+#              .before = 0) |>
+#   bind_rows(read_csv(here("analysis/data/raw_data",
+#                           "tagging_recapture",
+#                           "Priest Recapture Detail 2011-2023.csv"),
+#                      show_col_types = FALSE) |>
+#               clean_names() |>
+#               mutate(across(contains("_date_"),
+#                             mdy)) |>
+#               add_column(type = "recap",
+#                          .before = 0)) |>
+#   mutate(spawn_year = if_else(type == "mark",
+#                               if_else(month(release_date_mmddyyyy) < 7,
+#                                       year(release_date_mmddyyyy),
+#                                       year(release_date_mmddyyyy) + 1),
+#                               if_else(month(recap_date_mmddyyyy) < 7,
+#                                       year(recap_date_mmddyyyy),
+#                                       year(recap_date_mmddyyyy) + 1))) |>
+#   relocate(spawn_year,
+#            .before = 0)
 
 # pull out MRR data about all steelhead tags
 bio_df <-
@@ -144,6 +146,117 @@ bio_df |>
          event_type) |>
   slice(11:20)
 
+
+
+#-----------------------------------------------------------------
+# uses a complete tag history of marks/recaptures at PRD or PRDLD1
+sthd_tags <- read_csv(here("analysis/data/raw_data",
+                           "tagging_recapture",
+                           "Priest Rapids Mark_Recapture 2011-2023.csv"),
+                      show_col_types = F) |>
+  clean_names() |>
+  mutate(across(contains("_date_mm"),
+                mdy),
+         across(contains("date_time"),
+                mdy_hms)) |>
+  # fix problems with one PTAGIS file
+  mutate(
+    across(
+      event_date_mmddyyyy,
+      ~ if_else(event_file_name == "TLM-2011-165-PRD.xml",
+                event_release_date_mmddyyyy ,
+                .)),
+    across(
+      event_date_time_value,
+      ~ if_else(event_file_name == "TLM-2011-165-PRD.xml",
+                event_release_date_time_value,
+                .))) |>
+  mutate(spawn_year = if_else(month(event_date_mmddyyyy) < 7,
+                              year(event_date_mmddyyyy),
+                              year(event_date_mmddyyyy) + 1))
+
+# pull out MRR data about all steelhead tags
+bio_df <-
+  sthd_tags |>
+  select(spawn_year,
+         event_file_name) |>
+  distinct() |>
+  arrange(spawn_year,
+          event_file_name) |>
+  # slice(1:6) |>
+  mutate(tag_file = map(event_file_name,
+                        .f = function(x) {
+                          out <-
+                            tryCatch(queryMRRDataFile(x),
+                                     error =
+                                       function(cond) {
+                                         message(paste("Error with file", x))
+                                         message("Error message:")
+                                         message(cond)
+                                         return(NULL)
+                                       },
+                                     warning =
+                                       function(cond) {
+                                         message(paste("Warning with file", x))
+                                         message("Warning message:")
+                                         message(cond)
+                                         return(NULL)
+                                       })
+                          if("spawn_year" %in% names(out)) {
+                            out <- out |>
+                              select(-spawn_year)
+                          }
+
+                          return(out)
+                        })) |>
+  unnest(tag_file) |>
+  # fix problems with one PTAGIS file
+  mutate(
+    across(
+      event_date,
+      ~ if_else(event_file_name == "TLM-2011-165-PRD.xml",
+                release_date,
+                .))) |>
+  mutate(year = if_else(month(event_date) < 7,
+                        year(event_date),
+                        year(event_date) + 1)) |>
+  relocate(year,
+           .before = 0) |>
+  distinct() |>
+  filter(str_detect(species_run_rear_type, "^3"),
+         str_detect(pit_tag, "\\.\\.\\.", negate = T)) |>
+  arrange(year,
+          event_date)
+
+bio_df |>
+  group_by(spawn_year) |>
+  summarize(n_mrr_tags = n_distinct(pit_tag),
+            n_2tag = sum(!is.na(second_pit_tag)),
+            .groups = "drop") |>
+  full_join(sthd_tags |>
+              group_by(spawn_year) |>
+              summarize(n_sthd_tags = n_distinct(tag_code),
+                        .groups = "drop")) |>
+  mutate(diff = n_mrr_tags - n_sthd_tags)
+
+yr = 2015
+bio_df |>
+  filter(spawn_year == yr) |>
+  anti_join(sthd_tags |>
+              filter(spawn_year == yr) |>
+              select(pit_tag = tag_code)) |>
+  as.data.frame()
+
+
+bio_df |>
+  filter(pit_tag %in% pit_tag[duplicated(pit_tag)]) |>
+  arrange(pit_tag, event_date) |>
+  select(year,
+         event_file_name,
+         pit_tag,
+         event_date,
+         event_type) |>
+  filter(year == 2023)
 
 #-----------------------------------------------------------------
 tabyl(bio_df,
