@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: clean PTAGIS data with PITcleanr
 # Created: 4/27/20
-# Last Modified: 11/7/22
+# Last Modified: 9/8/23
 # Notes:
 
 #-----------------------------------------------------------------
@@ -19,17 +19,26 @@ library(here)
 load(here('analysis/data/derived_data/site_config.rda'))
 
 # which spawn year are we dealing with?
-yr = 2022
+yr = 2023
 
 # for(yr in 2011:2020) {
 
 # load and file biological data
-bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2022.rds')) %>%
-  filter(year == yr)
+# bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2022.rds')) %>%
+#   filter(year == yr)
+
+bio_df <-
+  read_excel(here('analysis/data/derived_data',
+                  'PRA_Sthd_BioData_v2.xlsx'),
+             sheet = as.character(yr)) |>
+  clean_names() |>
+  rename(tag_code = pit_tag)
+
 
 # any double-tagged fish?
 dbl_tag = bio_df %>%
-  filter(!is.na(tag_other))
+  # filter(!is.na(tag_other))
+  filter(!is.na(second_pit_tag))
 
 
 #-----------------------------------------------------------------
@@ -82,7 +91,8 @@ if(nrow(dbl_tag) > 0) {
   ptagis_obs %<>%
     left_join(dbl_tag %>%
                 mutate(fish_id = 1:n()) %>%
-                select(fish_id, starts_with("tag")) %>%
+                select(fish_id,
+                       starts_with("tag")) %>%
                 mutate(use_tag = tag_code) %>%
                 pivot_longer(cols = starts_with("tag"),
                              names_to = "source",
@@ -104,7 +114,8 @@ qcTagHistory(ptagis_obs,
              ignore_event_vs_release = T)
 
 # compress and process those observations with PITcleanr
-prepped_ch = PITcleanr::prepWrapper(ptagis_file = ptagis_obs,
+prepped_ch = PITcleanr::prepWrapper(cth_file = ptagis_obs,
+                                    file_type = "PTAGIS",
                                     configuration = configuration,
                                     parent_child = parent_child %>%
                                       addParentChildNodes(configuration = configuration),
@@ -217,7 +228,7 @@ tag_summ %>%
   as.data.frame()
 
 # where are tags assigned?
-janitor::tabyl(tag_summ, spawn_node) %>%
+janitor::tabyl(tag_summ, final_node) %>%
   arrange(desc(n)) %>%
   janitor::adorn_totals()
 
@@ -264,7 +275,7 @@ brnch_df = buildNodeOrder(addParentChildNodes(parent_child, configuration)) %>%
 
 tag_summ %<>%
   left_join(brnch_df %>%
-              select(spawn_node = node,
+              select(final_node = node,
                      branch_nm))
 
 # how many tags in each branch?
@@ -290,7 +301,7 @@ tag_summ %>%
 
 # look at run timing between branches
 tag_summ %>%
-  ggplot(aes(x = trap_date,
+  ggplot(aes(x = start_date,
              color = branch_nm,
              fill = branch_nm)) +
   geom_density(alpha = 0.2) +
