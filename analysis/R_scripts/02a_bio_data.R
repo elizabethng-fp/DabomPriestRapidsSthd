@@ -323,9 +323,9 @@ scale_age_df |>
 
 
 
-
+# which tags don't have scale data associated with them?
 bio_df |>
-  filter(spawn_year %in% c(2022:2023)) |>
+  filter(spawn_year %in% unique(scale_age_df$spawn_year)) |>
   full_join(scale_age_df |>
               filter(!(primary_pit_tag %in% primary_pit_tag[duplicated(primary_pit_tag)] &
                          age_scales == "Unreadable")) |>
@@ -339,7 +339,6 @@ bio_df |>
                         ptagis_file_name)),
             by = join_by(spawn_year,
                          pit_tag == primary_pit_tag)) |>
-  # names()
   filter(is.na(scale_age_data)) %>%
   arrange(event_date,
           pit_tag) |>
@@ -353,10 +352,10 @@ bio_df |>
          origin_field,
          origin_scales) |>
   write_csv(here("outgoing/other/missing_scale_data.csv"))
-  mutate(event_month = month(event_date,
-                             label = T)) |>
-  tabyl(spawn_year, event_month) |>
-  adorn_totals(where = "both")
+  # mutate(event_month = month(event_date,
+  #                            label = T)) |>
+  # tabyl(spawn_year, event_month) |>
+  # adorn_totals(where = "both")
 
 #-----------------------------------------------------------------
 # save as Excel file
