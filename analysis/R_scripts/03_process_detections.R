@@ -27,12 +27,15 @@ yr = 2023
 # bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2022.rds')) %>%
 #   filter(year == yr)
 
-bio_df <-
-  read_excel(here('analysis/data/derived_data',
-                  'PRA_Sthd_BioData_v2.xlsx'),
-             sheet = as.character(yr)) |>
-  clean_names() |>
-  rename(tag_code = pit_tag)
+bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2023.rds')) %>%
+  filter(year == yr)
+
+# bio_df <-
+#   read_excel(here('analysis/data/derived_data',
+#                   'PRA_Sthd_BioData_v2.xlsx'),
+#              sheet = as.character(yr)) |>
+#   clean_names() |>
+#   rename(tag_code = pit_tag)
 
 
 # any double-tagged fish?
@@ -87,31 +90,57 @@ if(yr %in% c(2015, 2018) ) {
   rm(clk_obs)
 }
 
+# any orphaned or disowned tags?
+qcTagHistory(ptagis_obs,
+             "PTAGIS",
+             ignore_event_vs_release = T)
+
+# deal with double tagged fish, assign all observations to one tag
+# if(nrow(dbl_tag) > 0) {
+#   ptagis_obs %<>%
+#     left_join(dbl_tag %>%
+#                 mutate(fish_id = 1:n()) %>%
+#                 select(fish_id,
+#                        starts_with("tag")) %>%
+#                 mutate(use_tag = tag_code) %>%
+#                 pivot_longer(cols = starts_with("tag"),
+#                              names_to = "source",
+#                              values_to = "tag_code") %>%
+#                 select(tag_code, use_tag),
+#               by = "tag_code") %>%
+#     rowwise() %>%
+#     mutate(tag_code = if_else(!is.na(use_tag),
+#                               use_tag,
+#                               tag_code)) %>%
+#     ungroup() %>%
+#     select(-use_tag) %>%
+#     distinct()
+# }
+
+# deal with double tagged fish, assign all observations to one tag
 if(nrow(dbl_tag) > 0) {
-  ptagis_obs %<>%
+  ptagis_obs <-
+    ptagis_obs |>
     left_join(dbl_tag %>%
                 mutate(fish_id = 1:n()) %>%
                 select(fish_id,
-                       starts_with("tag")) %>%
-                mutate(use_tag = tag_code) %>%
-                pivot_longer(cols = starts_with("tag"),
+                       contains("pit_tag")) %>%
+                mutate(use_tag = pit_tag) %>%
+                pivot_longer(cols = contains("pit_tag"),
                              names_to = "source",
                              values_to = "tag_code") %>%
                 select(tag_code, use_tag),
               by = "tag_code") %>%
     rowwise() %>%
-    mutate(tag_code = if_else(!is.na(use_tag),
+    mutate(tag_code = if_else(!is.na(use_tag) &
+                                !event_site_code_value %in% c("DISOWN",
+                                                              "ORPHAN"),
                               use_tag,
                               tag_code)) %>%
     ungroup() %>%
     select(-use_tag) %>%
     distinct()
 }
-
-# any orphaned or disowned tags?
-qcTagHistory(ptagis_obs,
-             "PTAGIS",
-             ignore_event_vs_release = T)
 
 # compress and process those observations with PITcleanr
 prepped_ch = PITcleanr::prepWrapper(cth_file = ptagis_obs,
@@ -122,6 +151,7 @@ prepped_ch = PITcleanr::prepWrapper(cth_file = ptagis_obs,
                                     min_obs_date = start_date,
                                     max_obs_date = max_obs_date,
                                     ignore_event_vs_release = F,
+                                    filter_orphan_disown_tags = FALSE,
                                     add_tag_detects = T,
                                     save_file = T,
                                     file_name = here('outgoing/PITcleanr', paste0('UC_Steelhead_', yr, '.xlsx')))
