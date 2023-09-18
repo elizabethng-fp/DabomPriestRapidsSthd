@@ -1,50 +1,46 @@
 site_code,node,site_name,site_type
 AEN,AEN,Aeneas Creek Temporary Array,INT
-ANT,ANTA0,Antoine Creek Instream Array,INT
-ANT,ANTB0,Antoine Creek Instream Array,INT
+ANR,ANR,Antoine Creek at AV Ranch,INT
+ANT,ANT_D,Antoine Creek Instream Array,INT
+ANT,ANT_U,Antoine Creek Instream Array,INT
 BPC,BPCA0,Bonaparte Creek Instream Array,INT
 BPC,BPCB0,Bonaparte Creek Instream Array,INT
-BVC,BVCA0,"Beaver Creek, Methow River",INT
-BVC,BVCB0,"Beaver Creek, Methow River",INT
-CHIWAR,CHLA0,Chiwawa River,MRR
-CHL,CHLA0,Lower Chiwawa River,INT
-CHP,CHLA0,Chiwawa Acc. Pond,INT
-CHL,CHLB0,Lower Chiwawa River,INT
-CHM,CHMA0,Chumstick Creek,INT
-CHM,CHMB0,Chumstick Creek,INT
-CHIKAC,CHUA0,"Chikamin Creek, tributary to Chiwawa River",MRR
-CHU,CHUA0,Upper Chiwawa River,INT
-CHU,CHUB0,Upper Chiwawa River,INT
-CHIWAC,CHWA0,"Chiwaukum Creek, tributary to Wenatchee River",MRR
-CHW,CHWA0,Chiwaukum Creek,INT
-CHW,CHWB0,Chiwaukum Creek,INT
+BVC,BVC_D,"Beaver Creek, Methow River",INT
+BVC,BVC_U,"Beaver Creek, Methow River",INT
+CHL,CHL_D,Lower Chiwawa River,INT
+CHL,CHL_U,Lower Chiwawa River,INT
+CHM,CHM_D,Chumstick Creek,INT
+CHM,CHM_U,Chumstick Creek,INT
+CHU,CHU_D,Upper Chiwawa River,INT
+CHU,CHU_U,Upper Chiwawa River,INT
+CHW,CHW_D,Chiwaukum Creek,INT
+CHW,CHW_U,Chiwaukum Creek,INT
 CLK,CLK,Colockum Creek,INT
-CRU,CRUA0,Upper Chewuch Instream Array,INT
-CRU,CRUB0,Upper Chewuch Instream Array,INT
-CRW,CRWA0,Chewuch River above Winthrop,INT
-CRW,CRWB0,Chewuch River above Winthrop,INT
+CRU,CRU_D,Upper Chewuch Instream Array,INT
+CRU,CRU_U,Upper Chewuch Instream Array,INT
+CRW,CRW_D,Chewuch River above Winthrop,INT
+CRW,CRW_U,Chewuch River above Winthrop,INT
 EBO,EBOB0,East Bank Hatchery Outfall,INT
 EHL,EHLA0,Entiat NFH Adult Ladder,INT
 EHL,EHLB0,Entiat NFH Adult Ladder,INT
-ENA,ENAA0,Upper Entiat River at rkm 17.1,INT
-ENM,ENAA0,Middle Entiat River,INT
-ENS,ENAA0,Upper Entiat River at rkm 35.7,INT
-ENA,ENAB0,Upper Entiat River at rkm 17.1,INT
-ENF,ENFA0,Upper Entiat River at rkm 40.6,INT
-ENF,ENFB0,Upper Entiat River at rkm 40.6,INT
-ENL,ENLA0,Lower Entiat River,INT
-ENL,ENLB0,Lower Entiat River,INT
+ENA,ENA_D,Upper Entiat River at rkm 17.1,INT
+ENA,ENA_U,Upper Entiat River at rkm 17.1,INT
+ENF,ENF_D,Upper Entiat River at rkm 40.6,INT
+ENF,ENF_U,Upper Entiat River at rkm 40.6,INT
+ENL,ENL_D,Lower Entiat River,INT
+ENL,ENL_U,Lower Entiat River,INT
 FST,FST,Foster Creek,INT
-GLC,GLCA0,"Gold Creek, Methow River",INT
-GLC,GLCB0,"Gold Creek, Methow River",INT
+GLC,GLC_D,"Gold Creek, Methow River",INT
+GLC,GLC_U,"Gold Creek, Methow River",INT
 HST,HSTB0,Touchet River at Harvey Shaw,INT
 ICH,ICHB0,Ice Harbor Dam (Combined),INT
-ICL,ICLA0,Lower Icicle Instream Array,INT
 ICL,ICLB0,Lower Icicle Instream Array,INT
-ICM,ICMA0,Middle Icicle Instream Array,INT
-ICM,ICMB0,Middle Icicle Instream Array,INT
-ICU,ICUA0,Upper Icicle Instream Array,INT
-ICU,ICUB0,Upper Icicle Instream Array,INT
+ICL,ICL_D,Lower Icicle Instream Array,INT
+ICL,ICL_U,Lower Icicle Instream Array,INT
+ICM,ICM_D,Middle Icicle Instream Array,INT
+ICM,ICM_U,Middle Icicle Instream Array,INT
+ICU,ICU_D,Upper Icicle Instream Array,INT
+ICU,ICU_U,Upper Icicle Instream Array,INT
 JD1,JD1B0,"John Day River, McDonald Ferry",INT
 158,JDA,Fifteenmile Ck at Eightmile Ck,INT
 15D,JDA,Fifteenmile Ck at Dry Ck,INT
@@ -456,88 +452,92 @@ WYCHUC,JDA,"Wychus Creek, Upper Deschutes River Basin",MRR
 WZDF,JDA,"Wizard Falls Hatchery, ODFW",MRR
 YOUNGB,JDA,"Youngs Bay, tributary to the Columbia River",MRR
 JOH,JOH,Johnson Creek,INT
-LBC,LBCA0,"Libby Creek, Methow River",INT
 LBC,LBCB0,"Libby Creek, Methow River",INT
+LBC,LBC_D,"Libby Creek, Methow River",INT
+LBC,LBC_U,"Libby Creek, Methow River",INT
 LLC,LLCA0,Loup Loup Creek Instream Array,INT
 LLC,LLCB0,Loup Loup Creek Instream Array,INT
-LMR,LMRA0,Lower Methow River at Pateros,INT
-LMB,LMRB0,Lower Methow River Barge,INT
-LMR,LMRB0,Lower Methow River at Pateros,INT
+LLC,LLC_D,Loup Loup Creek Instream Array,INT
+LLC,LLC_U,Loup Loup Creek Instream Array,INT
+LMR,LMR_D,Lower Methow River at Pateros,INT
+LMR,LMR_U,Lower Methow River at Pateros,INT
 LEAV,LNFA0,Leavenworth National Fish Hatchery,MRR
 LNF,LNFA0,Leavenworth NFH Adult Ladder,INT
 LNF,LNFB0,Leavenworth NFH Adult Ladder,INT
-DRY,LWEA0,"Dryden Diversion Dam, Wenatchee River",MRR
-LWE,LWEA0,Lower Wenatchee River,INT
-LWB,LWEB0,Lower Wenatchee Barge,INT
-LWE,LWEB0,Lower Wenatchee River,INT
-LWENAT,LWNA0,Little Wenatchee River,MRR
-LWN,LWNA0,Little Wenatchee River,INT
-LWN,LWNB0,Little Wenatchee River,INT
+LWE,LWE_D,Lower Wenatchee River,INT
+LWE,LWE_U,Lower Wenatchee River,INT
+LWN,LWN_D,Little Wenatchee River,INT
+LWN,LWN_U,Little Wenatchee River,INT
 MAD,MADA0,"Mad River, Entiat River Basin",INT
-MAD,MADB0,"Mad River, Entiat River Basin",INT
-MCL,MCLA0,Lower Mission Creek Instream,INT
-MCL,MCLB0,Lower Mission Creek Instream,INT
+MAD,MAD_D,"Mad River, Entiat River Basin",INT
+MAD,MAD_U,"Mad River, Entiat River Basin",INT
+MCL,MCL_D,Lower Mission Creek Instream,INT
+MCL,MCL_U,Lower Mission Creek Instream,INT
 MDR,MDRB0,McDonald Road Bridge,INT
 METH,METHA0,Methow Hatchery,MRR
 MSH,METHB0,Methow Fish Hatchery Outfall,INT
 MRC,MRCB0,Methow River at Carlton,INT
-MRW,MRWA0,Methow River at Winthrop,INT
-MRW,MRWB0,Methow River at Winthrop,INT
+MRW,MRW_D,Methow River at Winthrop,INT
+MRW,MRW_U,Methow River at Winthrop,INT
 MSH,MSHA0,Methow Fish Hatchery Outfall,INT
 MSH,MSHB0,Methow Fish Hatchery Outfall,INT
-"NAL","NALA0",Lower Nason Creek,INT
-"NASONC","NALA0",Nason Creek (tributary to Wenatchee River),MRR
-"NAL","NALB0",Lower Nason Creek,INT
-"NAU","NAUA0",Upper Nason Creek,INT
-"NAU","NAUB0",Upper Nason Creek,INT
-NMC,NMCA0,Ninemile Creek Instream Array,INT
-NMC,NMCB0,Ninemile Creek Instream Array,INT
+"NAL","NAL_D",Lower Nason Creek,INT
+"NAL","NAL_U",Lower Nason Creek,INT
+"NAU","NAU_D",Upper Nason Creek,INT
+"NAU","NAU_U",Upper Nason Creek,INT
+NMC,NMC_D,Ninemile Creek Instream Array,INT
+NMC,NMC_U,Ninemile Creek Instream Array,INT
 OBF,OBF,Omak Creek below Mission Falls,INT
-OKC,OKCA0,Okanagan Channel at VDS-3,INT
 OKC,OKCB0,Okanagan Channel at VDS-3,INT
-OKI,OKIA0,Inkaneep Creek ,INT
-OKI,OKIB0,Inkaneep Creek ,INT
-OKL,OKLA0,Lower Okanogan Instream Array,INT
-OKL,OKLB0,Lower Okanogan Instream Array,INT
+OKC,OKC_D,Okanagan Channel at VDS-3,INT
+OKC,OKC_U,Okanagan Channel at VDS-3,INT
+OKI,OKI_D,Inkaneep Creek ,INT
+OKI,OKI_U,Inkaneep Creek ,INT
+OKL,OKL_D,Lower Okanogan Instream Array,INT
+OKL,OKL_U,Lower Okanogan Instream Array,INT
 OKM,OKM,McIntyre Dam,INT
 OKP,OKP,Penticton Channel PIT Array,INT
-OKS,OKSA0,Shingle Creek,INT
-OKS,OKSB0,Shingle Creek,INT
-OKV,OKVA0,"Vasuex Creek, BC, Canada",INT
-OKV,OKVB0,"Vasuex Creek, BC, Canada",INT
-OKW,OKWA0,Shuttleworth Creek,INT
-OKW,OKWB0,Shuttleworth Creek,INT
-OMF,OMFA0,Omak Creek above Mission Falls,INT
-OMF,OMFB0,Omak Creek above Mission Falls,INT
+OKS,OKS_D,Shingle Creek,INT
+OKS,OKS_U,Shingle Creek,INT
+OKV,OKV_D,"Vasuex Creek, BC, Canada",INT
+OKV,OKV_U,"Vasuex Creek, BC, Canada",INT
+OKW,OKW_D,Shuttleworth Creek,INT
+OKW,OKW_U,Shuttleworth Creek,INT
+OMF,OMF_D,Omak Creek above Mission Falls,INT
+OMF,OMF_U,Omak Creek above Mission Falls,INT
 OMH,OMH,Omak Creek Haley Creek Road,INT
-OMK,OMKA0,Omak Creek Instream Array,INT
 OMK,OMKB0,Omak Creek Instream Array,INT
-PES,PESA0,Peshastin Creek,INT
-PES,PESB0,Peshastin Creek,INT
-PEU,PEUA0,Upper Peshastin Creek,INT
-PEU,PEUB0,Upper Peshastin Creek,INT
+OMK,OMK_D,Omak Creek Instream Array,INT
+OMK,OMK_U,Omak Creek Instream Array,INT
+PES,PES_D,Peshastin Creek,INT
+PES,PES_U,Peshastin Creek,INT
+PEU,PEU_D,Upper Peshastin Creek,INT
+PEU,PEU_U,Upper Peshastin Creek,INT
 PRA,PRA,Priest Rapids Adult,INT
 PRDLD1,PRA,PRD - Release into the Left Bank (facing downstream) Adult Fish Ladder,MRR
 PRH,PRHA0,Priest Rapids Hatchery Outfall,INT
 PRH,PRHB0,Priest Rapids Hatchery Outfall,INT
 PRO,PROB0,Prosser Diversion Dam Combined,INT
 PRV,PRV,Walla Walla R at Pierce RV Prk,INT
-RCT,RCTA0,Roaring Creek Temporary Array,INT
 RCT,RCTB0,Roaring Creek Temporary Array,INT
+RCT,RCT_D,Roaring Creek Temporary Array,INT
+RCT,RCT_U,Roaring Creek Temporary Array,INT
 RIA,RIA,Rock Island Adult,INT
 RRF,RRF,Rocky Reach Fishway,INT
 RRJ,RRF,Rocky Reach Dam Juvenile,INT
-RSH,RSHA0,Ringold Springs Hatch. Outfall,INT
-RSH,RSHB0,Ringold Springs Hatch. Outfall,INT
-SA0,SA0A0,Salmon Creek below OID Div.,INT
-SA0,SA0B0,Salmon Creek below OID Div.,INT
-SA1,SA1A0,Salmon Creek Instream Array,INT
+RSH,RSH_D,Ringold Springs Hatch. Outfall,INT
+RSH,RSH_U,Ringold Springs Hatch. Outfall,INT
+SA0,SA0_D,Salmon Creek below OID Div.,INT
+SA0,SA0_U,Salmon Creek below OID Div.,INT
 SA1,SA1B0,Salmon Creek Instream Array,INT
-SCP,SCPA0,Spring Creek Acclimation Pond,INT
-SCP,SCPB0,Spring Creek Acclimation Pond,INT
-SKA,SKAA0,Skaha Dam Fish Ladder,INT
-SKA,SKAB0,Skaha Dam Fish Ladder,INT
-SKA,SKAB0,Skaha Dam,MRR
+SA1,SA1_D,Salmon Creek Instream Array,INT
+SA1,SA1_U,Salmon Creek Instream Array,INT
+SAD,SAD,Salmon Creek Above OID Div.,INT
+SCP,SCP_D,Spring Creek Acclimation Pond,INT
+SCP,SCP_U,Spring Creek Acclimation Pond,INT
+SKA,SKA_D,Skaha Dam Fish Ladder,INT
+SKA,SKA_D,Skaha Dam,MRR
+SKA,SKA_U,Skaha Dam Fish Ladder,INT
 TMF,TMF,Three Mile Falls Dam Combined,INT
 TNK,TNK,Tunk Creek Instream Array,INT
 TON,TON,Tonasket Creek,INT
@@ -545,8 +545,8 @@ TUF,TUM,Tumwater Dam Adult Fishway,INT
 TUM,TUM,"Tumwater Dam, Wenatchee River",MRR
 TUMFBY,TUM,TUM - Release into the Forebay within 0.5 km upstream of Dam,MRR
 TWISPW,TWISPW,Twisp River Weir (WDFW),MRR
-TWR,TWRA0,Lwr Twisp Rvr near MSRF Ponds,INT
-TWR,TWRB0,Lwr Twisp Rvr near MSRF Ponds,INT
+TWR,TWR_D,Lwr Twisp Rvr near MSRF Ponds,INT
+TWR,TWR_U,Lwr Twisp Rvr near MSRF Ponds,INT
 UWE,UWE,Upper Wenatchee River,INT
 WAN,WAN,Wanacut Creek,INT
 WEA,WEA,"Wells Dam, DCPUD Adult Ladders",INT
@@ -554,8 +554,7 @@ WEH,WEHA0,Wells Dam Hatchery,INT
 WEH,WEHB0,Wells Dam Hatchery,INT
 WFC,WFC,"Wolf Creek, Methow River",INT
 WHS,WHS,Wildhorse Spring Creek,INT
-WHITER,WTLA0,"White River, Wenatchee River Basin",MRR
-WTL,WTLA0,"White River, Wenatchee Basin",INT
-WTL,WTLB0,"White River, Wenatchee Basin",INT
+WTL,WTL_D,"White River, Wenatchee Basin",INT
+WTL,WTL_U,"White River, Wenatchee Basin",INT
 ZSL,ZSLA0,Zosel Dam Combined,INT
 ZSL,ZSLB0,Zosel Dam Combined,INT

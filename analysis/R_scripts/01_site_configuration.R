@@ -315,7 +315,9 @@ sites_sf = writeOldNetworks()$PriestRapids %>%
       "SKA",
       "OKS",
       "OKP",
-      "OMH"))) %>%
+      "OMH",
+      "SAD",
+      "ANR"))) %>%
   left_join(configuration) %>%
   group_by(site_code) %>%
   filter(config_id == max(config_id)) %>%
@@ -483,12 +485,16 @@ parent_child %>%
                       "SKA",
                       "OKS",
                       "OKP",
-                      "OMH") |
+                      "OMH",
+                      "ANR",
+                      "SAD") |
            parent %in% c("OBF",
                          "OKC",
                          "OKM",
                          "SKA",
-                         "OMF"))
+                         "OMF",
+                         "ANR",
+                         "SAD"))
 
 # add RKMs from configuration file (since we had to fix at least one from PTAGIS)
 parent_child %<>%
