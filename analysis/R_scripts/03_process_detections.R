@@ -19,7 +19,7 @@ library(here)
 load(here('analysis/data/derived_data/site_config.rda'))
 
 # which spawn year are we dealing with?
-yr = 2023
+yr = 2022
 
 # for(yr in 2011:2020) {
 
@@ -28,7 +28,8 @@ yr = 2023
 #   filter(year == yr)
 
 bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2023.rds')) %>%
-  filter(year == yr)
+  filter(year == yr) |>
+  rename(tag_code = pit_tag)
 
 # bio_df <-
 #   read_excel(here('analysis/data/derived_data',
@@ -40,8 +41,8 @@ bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2023.rds')) %>%
 
 # any double-tagged fish?
 dbl_tag = bio_df %>%
-  # filter(!is.na(tag_other))
-  filter(!is.na(second_pit_tag))
+  filter(!is.na(tag_other))
+  # filter(!is.na(second_pit_tag))
 
 
 #-----------------------------------------------------------------
@@ -153,7 +154,7 @@ prepped_ch = PITcleanr::prepWrapper(cth_file = ptagis_obs,
                                     ignore_event_vs_release = F,
                                     filter_orphan_disown_tags = FALSE,
                                     add_tag_detects = T,
-                                    save_file = T,
+                                    save_file = F,
                                     file_name = here('outgoing/PITcleanr', paste0('UC_Steelhead_', yr, '.xlsx')))
 
 
@@ -177,8 +178,38 @@ save(parent_child, configuration, start_date, bio_df, prepped_ch,
 load(here('analysis/data/derived_data/PITcleanr',
           paste0('UC_Steelhead_', yr, '.rda')))
 
-wdfw_df = read_excel(here('analysis/data/derived_data/WDFW',
-                          paste0('UC_Steelhead_', yr, '.xlsx')))
+# wdfw_df = read_excel(here('analysis/data/derived_data/WDFW',
+#                           paste0('UC_Steelhead_', yr, '.xlsx')))
+
+wdfw_df <-
+  read_excel(paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/inputs/PITcleanr/PITcleanr Final/",
+                    "UC_Steelhead_",
+                    yr,
+                    ".xlsx")) |>
+  mutate(across(c(duration,
+                  travel_time),
+                ~ as.difftime(., units = "mins")))
+
+
+prepped_ch |>
+  group_by(tag_code) |>
+  summarize(n_org_detects = n()) |>
+  left_join(wdfw_df |>
+              group_by(tag_code) |>
+              summarize(n_new_detects = n())) |>
+  filter(n_org_detects != n_new_detects) |>
+  select(tag_code) |>
+  slice(1) |>
+  left_join(prepped_ch) |>
+  # left_join(wdfw_df) |>
+  select(tag_code,
+         node,
+         min_det,
+         path,
+         auto_keep_obs)
+
+
+
 
 filter_obs = wdfw_df %>%
   mutate(user_keep_obs = if_else(is.na(user_keep_obs),
