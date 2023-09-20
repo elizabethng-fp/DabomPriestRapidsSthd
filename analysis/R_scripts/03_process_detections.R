@@ -177,8 +177,14 @@ save(parent_child, configuration, start_date, bio_df, prepped_ch,
 load(here('analysis/data/derived_data/PITcleanr',
           paste0('UC_Steelhead_', yr, '.rda')))
 
-wdfw_df = read_excel(here('analysis/data/derived_data/WDFW',
-                          paste0('UC_Steelhead_', yr, '.xlsx')))
+# wdfw_df = read_excel(here('analysis/data/derived_data/WDFW',
+#                           paste0('UC_Steelhead_', yr, '.xlsx')))
+
+wdfw_df <-
+  read_excel(paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/inputs/PITcleanr/PITcleanr Final/",
+                    "UC_Steelhead_",
+                    yr,
+                    ".xlsx"))
 
 filter_obs = wdfw_df %>%
   mutate(user_keep_obs = if_else(is.na(user_keep_obs),
