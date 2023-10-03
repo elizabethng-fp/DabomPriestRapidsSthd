@@ -123,7 +123,8 @@ for(yr in 2011:2022) {
 
   # compile all movement probabilities, and multiply them appropriately
   trans_df = compileTransProbs(dabom_mod,
-                               parent_child) %>%
+                               parent_child,
+                               configuration) %>%
     mutate(origin = recode(origin,
                            "2" = "H",
                            "1" = "W"))
@@ -232,7 +233,7 @@ for(yr in 2011:2022) {
     # add re-ascension data
     mutate(reasc_df = map(pit_code,
                           .f = function(x) {
-                            dart_df = try(suppressMessages(queryPITtagData(damPIT = x,
+                            dart_df = try(suppressMessages(STADEM::queryPITtagData(damPIT = x,
                                                                            spp = "Steelhead",
                                                                            start_date = start_date,
                                                                            end_date = end_date)))
@@ -417,8 +418,8 @@ for(yr in 2011:2022) {
       mutate(across(c(mean, median, mode, sd, matches('CI$')),
                     ~ if_else(. < 0, 0, .))) %>%
       mutate(across(c(mean, median, mode, sd, skew, kurtosis, matches('CI$')),
-                    round,
-                    digits = 2)) %>%
+                    ~ round(.,
+                            digits = 2))) %>%
       arrange(desc(origin), location) %>%
       tibble::add_column(species = "Steelhead",
                          spawn_year = yr,
