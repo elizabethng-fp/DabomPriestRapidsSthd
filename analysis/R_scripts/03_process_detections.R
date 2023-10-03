@@ -19,7 +19,7 @@ library(here)
 load(here('analysis/data/derived_data/site_config.rda'))
 
 # which spawn year are we dealing with?
-yr = 2023
+yr = 2022
 
 # for(yr in 2011:2020) {
 
@@ -28,7 +28,8 @@ yr = 2023
 #   filter(year == yr)
 
 bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2023.rds')) %>%
-  filter(year == yr)
+  filter(year == yr) |>
+  rename(tag_code = pit_tag)
 
 # bio_df <-
 #   read_excel(here('analysis/data/derived_data',
@@ -40,8 +41,8 @@ bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2023.rds')) %>%
 
 # any double-tagged fish?
 dbl_tag = bio_df %>%
-  # filter(!is.na(tag_other))
-  filter(!is.na(second_pit_tag))
+  filter(!is.na(tag_other))
+  # filter(!is.na(second_pit_tag))
 
 
 #-----------------------------------------------------------------
@@ -153,7 +154,7 @@ prepped_ch = PITcleanr::prepWrapper(cth_file = ptagis_obs,
                                     ignore_event_vs_release = F,
                                     filter_orphan_disown_tags = FALSE,
                                     add_tag_detects = T,
-                                    save_file = T,
+                                    save_file = F,
                                     file_name = here('outgoing/PITcleanr', paste0('UC_Steelhead_', yr, '.xlsx')))
 
 
