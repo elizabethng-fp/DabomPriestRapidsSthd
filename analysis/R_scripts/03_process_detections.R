@@ -208,9 +208,6 @@ prepped_ch |>
          path,
          auto_keep_obs)
 
-
-
-
 filter_obs = wdfw_df %>%
   mutate(user_keep_obs = if_else(is.na(user_keep_obs),
                                  auto_keep_obs,
