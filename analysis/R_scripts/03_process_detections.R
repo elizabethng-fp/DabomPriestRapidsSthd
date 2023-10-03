@@ -185,7 +185,24 @@ wdfw_df <-
   read_excel(paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/inputs/PITcleanr/PITcleanr Final/",
                     "UC_Steelhead_",
                     yr,
-                    ".xlsx"))
+                    ".xlsx")) |>
+  rename(notes = `...17`) |>
+  mutate(across(c(duration,
+                  travel_time),
+                ~ as.difftime(., units = "mins")))
+
+identical(nrow(prepped_ch),
+          nrow(wdfw_df))
+
+# any missing rows in one or the other file?
+prepped_ch |>
+  select(tag_code:min_det) |>
+  anti_join(wdfw_df)
+
+wdfw_df |>
+  select(tag_code:min_det) |>
+  anti_join(prepped_ch)
+
 
 filter_obs = wdfw_df %>%
   mutate(user_keep_obs = if_else(is.na(user_keep_obs),
@@ -202,10 +219,10 @@ tag_path = summarizeTagData(filter_obs,
                               group_by(tag_code) %>%
                               slice(1) %>%
                               ungroup()) %>%
-  select(tag_code, spawn_node) %>%
+  select(tag_code, final_node) %>%
   distinct() %>%
   left_join(all_paths,
-            by = c('spawn_node' = 'end_loc')) %>%
+            by = c('final_node' = 'end_loc')) %>%
   rename(tag_path = path)
 
 # check if any user definied keep_obs lead to invalid paths
