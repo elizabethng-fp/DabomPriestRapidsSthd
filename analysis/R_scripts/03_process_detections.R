@@ -4,6 +4,10 @@
 # Last Modified: 9/8/23
 # Notes:
 
+# if needed, install development version of packages
+# devtools::install_github("KevinSee/PITcleanr@develop")
+# devtools::install_github("KevinSee/DABOM@develop")
+
 #-----------------------------------------------------------------
 # load needed libraries
 library(PITcleanr)
@@ -19,7 +23,7 @@ library(here)
 load(here('analysis/data/derived_data/site_config.rda'))
 
 # which spawn year are we dealing with?
-yr = 2022
+yr = 2023
 
 # for(yr in 2011:2020) {
 
@@ -28,8 +32,8 @@ yr = 2022
 #   filter(year == yr)
 
 bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2023.rds')) %>%
-  filter(year == yr) |>
-  rename(tag_code = pit_tag)
+  filter(year == yr) #|>
+  # rename(tag_code = pit_tag)
 
 # bio_df <-
 #   read_excel(here('analysis/data/derived_data',
@@ -41,8 +45,8 @@ bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2023.rds')) %>%
 
 # any double-tagged fish?
 dbl_tag = bio_df %>%
-  filter(!is.na(tag_other))
-  # filter(!is.na(second_pit_tag))
+  # filter(!is.na(tag_other))
+  filter(!is.na(second_pit_tag))
 
 
 #-----------------------------------------------------------------
@@ -130,7 +134,8 @@ if(nrow(dbl_tag) > 0) {
                 pivot_longer(cols = contains("pit_tag"),
                              names_to = "source",
                              values_to = "tag_code") %>%
-                select(tag_code, use_tag),
+                select(tag_code, use_tag) |>
+                filter(tag_code != use_tag),
               by = "tag_code") %>%
     rowwise() %>%
     mutate(tag_code = if_else(!is.na(use_tag) &
@@ -154,7 +159,7 @@ prepped_ch = PITcleanr::prepWrapper(cth_file = ptagis_obs,
                                     ignore_event_vs_release = F,
                                     filter_orphan_disown_tags = FALSE,
                                     add_tag_detects = T,
-                                    save_file = F,
+                                    save_file = T,
                                     file_name = here('outgoing/PITcleanr', paste0('UC_Steelhead_', yr, '.xlsx')))
 
 
@@ -190,23 +195,124 @@ wdfw_df <-
                   travel_time),
                 ~ as.difftime(., units = "mins")))
 
+identical(n_distinct(prepped_ch$tag_code),
+          n_distinct(wdfw_df$tag_code))
+
+nrow(wdfw_df)
+nrow(prepped_ch)
+
+
+# update with new node codes
+wdfw_df <-
+  wdfw_df |>
+  mutate(across(c(node,
+                  path,
+                  tag_detects),
+                ~ str_replace_all(., "B0", "_D")),
+         across(c(node,
+                  path,
+                  tag_detects),
+                ~ str_replace_all(., "A0", "_U")),
+         across(c(node),
+                ~ str_replace_all(., "^S_U", "SA0")),
+         across(c(tag_detects,
+                  path),
+                ~ str_replace_all(., " S_U", " SA0")))
+
+# what rows are in prepped_ch but not in wdfw_df?
+prepped_ch |>
+  select(tag_code:min_det,
+         -n_dets) |>
+  anti_join(wdfw_df)
+
+# vice versa?
+wdfw_df |>
+  select(tag_code:min_det,
+         -n_dets) |>
+  anti_join(prepped_ch)
+
+
 
 prepped_ch |>
-  group_by(tag_code) |>
-  summarize(n_org_detects = n()) |>
-  left_join(wdfw_df |>
-              group_by(tag_code) |>
-              summarize(n_new_detects = n())) |>
-  filter(n_org_detects != n_new_detects) |>
+  select(tag_code:min_det,
+         -n_dets) |>
+  anti_join(wdfw_df) |>
   select(tag_code) |>
-  slice(1) |>
-  left_join(prepped_ch) |>
-  # left_join(wdfw_df) |>
-  select(tag_code,
-         node,
-         min_det,
-         path,
-         auto_keep_obs)
+  distinct() |>
+  slice(10) |>
+  left_join(prepped_ch |>
+              select(tag_code:max_det,
+                     auto_keep_obs,
+                     user_keep_obs,
+                     path)) |>
+  left_join(wdfw_df |>
+              select(tag_code:max_det,
+                     wdfw_keep_obs = user_keep_obs)) |>
+  select(-path,
+         -max_det) #|>
+  # tail(10)
+  # select(-user_keep_obs)
+
+
+# add a few rows back, and correct the user_keep_obs field
+
+if(yr == 2022) {
+  wdfw_df <-
+    prepped_ch |>
+    select(-user_keep_obs) |>
+    full_join(wdfw_df |>
+                select(tag_code:max_det,
+                       user_keep_obs)) |>
+    mutate(
+      across(user_keep_obs,
+             ~ if_else(tag_code == "3DD.003DA28953",
+                       if_else(node %in% c("PRA", "PRO_D", "PRO_U"),
+                               T, F),
+                       .)),
+      across(user_keep_obs,
+             ~ if_else(tag_code == "3DD.003DA28960",
+                       T,
+                       .)),
+      across(user_keep_obs,
+             ~ if_else(tag_code == "3DD.003DA28A0F",
+                       if_else(node %in% c("OBF", "OMF_D"),
+                               T, .),
+                       .))) |>
+    filter(!is.na(auto_keep_obs))
+
+} else if(yr == 2023) {
+
+  wdfw_df <-
+    prepped_ch |>
+    select(-user_keep_obs) |>
+    full_join(wdfw_df |>
+                select(tag_code:max_det,
+                       user_keep_obs)) |>
+    mutate(
+      across(user_keep_obs,
+             ~ if_else(tag_code %in% c("3DD.003BDDBF78",
+                                       "3DD.003DA28B7A",
+                                       "3DD.003DA28CB1",
+                                       "3DD.003DA28D38",
+                                       "3DD.003DA28EE6",
+                                       "3DD.003DA29002"),
+                       if_else(min_det > ymd(max_obs_date),
+                               F, .),
+                       .)),
+      across(user_keep_obs,
+             ~ if_else(tag_code %in% c("3DD.003DA28C1F",
+                                       "3DD.003DA28C62",
+                                       "3DD.003DA28D42",
+                                       "3DD.003DA28EB0",
+                                       "3DD.003DA28BD1"),
+                       auto_keep_obs, .))) |>
+    filter(!is.na(auto_keep_obs))
+}
+
+tabyl(wdfw_df,
+      auto_keep_obs,
+      user_keep_obs)
+
 
 filter_obs = wdfw_df %>%
   mutate(user_keep_obs = if_else(is.na(user_keep_obs),
@@ -220,13 +326,13 @@ all_paths = buildPaths(addParentChildNodes(parent_child,
 
 tag_path = summarizeTagData(filter_obs,
                             bio_df %>%
-                              group_by(tag_code) %>%
+                              group_by(tag_code = pit_tag) %>%
                               slice(1) %>%
                               ungroup()) %>%
-  select(tag_code, spawn_node) %>%
+  select(tag_code, final_node) %>%
   distinct() %>%
   left_join(all_paths,
-            by = c('spawn_node' = 'end_loc')) %>%
+            by = join_by(final_node == end_loc)) %>%
   rename(tag_path = path)
 
 # check if any user definied keep_obs lead to invalid paths
@@ -241,17 +347,10 @@ error_tags = filter_obs %>%
 
 nrow(error_tags)
 error_tags %>%
-  left_join(wdfw_df) %>%
+  # left_join(wdfw_df) %>%
+  left_join(filter_obs) |>
   as.data.frame()
 
-
-prepped_ch %>%
-  select(-user_keep_obs) %>%
-  left_join(wdfw_df %>%
-              select(tag_code:max_det,
-                     user_keep_obs)) %>%
-  tabyl(auto_keep_obs,
-        user_keep_obs)
 
 
 
@@ -270,11 +369,13 @@ save(parent_child, configuration, start_date, bio_df, prepped_ch,
 # tag summaries
 #-----------------------------------------------------------------
 # use auto_keep_obs for the moment
-tag_summ = summarizeTagData(prepped_ch %>%
-                              mutate(user_keep_obs = if_else(is.na(user_keep_obs),
-                                                             auto_keep_obs,
-                                                             user_keep_obs)),
+tag_summ = summarizeTagData(prepped_ch |>
+                              mutate(across(user_keep_obs,
+                                            ~ if_else(is.na(.),
+                                                      auto_keep_obs,
+                                                      .))),
                             bio_df %>%
+                              rename(tag_code = pit_tag) |>
                               group_by(tag_code) %>%
                               slice(1) %>%
                               ungroup())
@@ -286,19 +387,31 @@ tag_summ %>%
   as.data.frame()
 
 # where are tags assigned?
-janitor::tabyl(tag_summ, final_node) %>%
-  arrange(desc(n)) %>%
-  janitor::adorn_totals()
+janitor::tabyl(tag_summ,
+               final_node,
+               origin) %>%
+  janitor::adorn_totals("both") |>
+  arrange(desc(Total))
+
 
 # preliminary estimate of node efficiency
 node_eff = prepped_ch %>%
-  mutate(user_keep_obs = auto_keep_obs) %>%
+  mutate(across(user_keep_obs,
+                ~ if_else(is.na(.),
+                          auto_keep_obs,
+                          .))) |>
   filter(user_keep_obs) %>%
   estNodeEff(node_order = buildNodeOrder(addParentChildNodes(parent_child, configuration)))
 
 node_eff %>%
   filter(tags_at_node > 0,
          eff_est < 1)
+
+node_eff %>%
+  filter(tags_at_node > 0) |>
+  # arrange(desc(eff_se))
+  arrange(eff_est)
+
 
 #-----------------------------------------------------------------
 # examine some of the output
@@ -338,15 +451,17 @@ tag_summ %<>%
 
 # how many tags in each branch?
 tag_summ %>%
-  janitor::tabyl(branch_nm) %>%
-  janitor::adorn_pct_formatting() %>%
-  arrange(desc(n))
+  janitor::tabyl(branch_nm,
+                 origin) %>%
+  janitor::adorn_totals("both") |>
+  # janitor::adorn_pct_formatting() %>%
+  arrange(desc(Total))
 
 # age comp in each branch, by sex
 tag_summ %>%
-  filter(!is.na(final_age)) %>%
+  filter(!is.na(age_scales)) %>%
   ggplot(aes(x = branch_nm,
-             fill = as.ordered(final_age))) +
+             fill = as.ordered(age_scales))) +
   geom_bar(position = position_fill()) +
   facet_wrap(~ sex) +
   theme_bw() +
