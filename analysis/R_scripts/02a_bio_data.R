@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: create tag lists to feed to PTAGIS query
 # Created: 8/15/2023
-# Last Modified: 9/8/2023
+# Last Modified: 11/21/2023
 # Notes:
 
 #-----------------------------------------------------------------
@@ -14,139 +14,6 @@ library(janitor)
 library(magrittr)
 library(writexl)
 library(here)
-
-#-----------------------------------------------------------------
-# which spawn years are we interested in?
-# spwn_yrs <- 2021:2023
-#
-# # read in tagging and recapture data from Priest for those years
-# sthd_tags <-
-#   tibble(spawn_year = spwn_yrs) |>
-#   mutate(tag_data = map(spawn_year,
-#                         .f = function(yr) {
-#                           read_csv(here("analysis/data/raw_data",
-#                                         "tagging_recapture",
-#                                         paste0("Priest Tagging Detail ",
-#                                                yr, ".csv")),
-#                                    show_col_types = FALSE) |>
-#                             clean_names() |>
-#                             mutate(across(contains("_date_"),
-#                                           mdy)) |>
-#                             add_column(type = "mark",
-#                                        .before = 0) |>
-#                             bind_rows(read_csv(here("analysis/data/raw_data",
-#                                                     "tagging_recapture",
-#                                                     paste0("Priest Recapture Detail ",
-#                                                            yr, ".csv")),
-#                                                show_col_types = FALSE) |>
-#                                         clean_names() |>
-#                                         mutate(across(contains("_date_"),
-#                                                       mdy)) |>
-#                                         add_column(type = "recap",
-#                                                    .before = 0))
-#                         })) |>
-#   unnest(tag_data)
-
-#-----------------------------------------------------------------
-# one file for 2011 - 2023
-
-# uses tagging detail report and recapture detail report
-# sthd_tags <-
-#   read_csv(here("analysis/data/raw_data",
-#                 "tagging_recapture",
-#                 "Priest Tagging Detail 2011-2023.csv"),
-#            show_col_types = FALSE) |>
-#   clean_names() |>
-#   mutate(across(contains("_date_"),
-#                 mdy)) |>
-#   add_column(type = "mark",
-#              .before = 0) |>
-#   bind_rows(read_csv(here("analysis/data/raw_data",
-#                           "tagging_recapture",
-#                           "Priest Recapture Detail 2011-2023.csv"),
-#                      show_col_types = FALSE) |>
-#               clean_names() |>
-#               mutate(across(contains("_date_"),
-#                             mdy)) |>
-#               add_column(type = "recap",
-#                          .before = 0)) |>
-#   mutate(spawn_year = if_else(type == "mark",
-#                               if_else(month(release_date_mmddyyyy) < 7,
-#                                       year(release_date_mmddyyyy),
-#                                       year(release_date_mmddyyyy) + 1),
-#                               if_else(month(recap_date_mmddyyyy) < 7,
-#                                       year(recap_date_mmddyyyy),
-#                                       year(recap_date_mmddyyyy) + 1))) |>
-#   relocate(spawn_year,
-#            .before = 0)
-
-# # pull out MRR data about all steelhead tags
-# bio_df <-
-#   sthd_tags |>
-#   mutate(ptagis_file_nm = if_else(type == "mark",
-#                                   mark_file_name,
-#                                   recap_file_name)) |>
-#   select(spawn_year,
-#          ptagis_file_nm) |>
-#   distinct() |>
-#   arrange(spawn_year,
-#           ptagis_file_nm) |>
-#   # slice(1:6) |>
-#   mutate(tag_file = map(ptagis_file_nm,
-#                         .f = function(x) {
-#                           out <-
-#                             tryCatch(queryMRRDataFile(x),
-#                                      error =
-#                                        function(cond) {
-#                                          message(paste("Error with file", x))
-#                                          message("Error message:")
-#                                          message(cond)
-#                                          return(NULL)
-#                                        },
-#                                      warning =
-#                                        function(cond) {
-#                                          message(paste("Warning with file", x))
-#                                          message("Warning message:")
-#                                          message(cond)
-#                                          return(NULL)
-#                                        })
-#                           if("spawn_year" %in% names(out)) {
-#                             out <- out |>
-#                               select(-spawn_year)
-#                           }
-#
-#                           return(out)
-#                         })) |>
-#   unnest(tag_file) |>
-#   # fix problems with one PTAGIS file
-#   mutate(
-#     across(
-#       event_date,
-#       ~ if_else(ptagis_file_nm == "TLM-2011-165-PRD.xml",
-#                 release_date,
-#                 .))) |>
-#   mutate(year = if_else(month(event_date) < 7,
-#                               year(event_date),
-#                               year(event_date) + 1)) |>
-#   relocate(year,
-#            .before = 0) |>
-#   distinct() |>
-#   filter(str_detect(species_run_rear_type, "^3")) |>
-#   arrange(year,
-#           event_date)
-#
-#
-# bio_df |>
-#   filter(pit_tag %in% pit_tag[duplicated(pit_tag)]) |>
-#   arrange(pit_tag, event_date) |>
-#   select(year,
-#          ptagis_file_nm,
-#          pit_tag,
-#          event_date,
-#          event_type) |>
-#   slice(11:20)
-#
-
 
 #-----------------------------------------------------------------
 # uses a complete tag history of marks/recaptures at PRD or PRDLD1
@@ -284,26 +151,64 @@ scale_age_df <-
                               clean_names()
                           })) |>
   unnest(scale_data) |>
-  filter(spawn_year %in% bio_df$spawn_year) |>
+  filter(spawn_year %in% unique(bio_df$spawn_year)) |>
   mutate(across(age_scales,
                 str_to_title),
          across(age_scales,
                 ~ if_else(nchar(.) > 10 & !is.na(as.numeric(.)),
                           as.character(round(as.numeric(.), 1)),
-                          .)))
+                          .))) |>
+  mutate(scale_id = if_else(!is.na(scale_card),
+                            scale_card,
+                            scale_cell)) |>
+  relocate(scale_id,
+           .after = "scale_cell") |>
+  select(-scale_card,
+         -scale_cell) |>
+  distinct()
 
+# which PIT tags are duplciated?
+# and what are the ages associated with those?
 scale_age_df |>
-  filter(age_scales == "Unreadable") |>
   filter(primary_pit_tag %in% primary_pit_tag[duplicated(primary_pit_tag)]) |>
   arrange(spawn_year,
-          primary_pit_tag)
+          primary_pit_tag) |>
+  select(spawn_year,
+         primary_pit_tag,
+         age_scales) |>
+  group_by(primary_pit_tag) |>
+  mutate(n_rec = 1:n()) |>
+  ungroup() |>
+  pivot_wider(names_from = n_rec,
+              values_from = age_scales) |>
+  filter(`1` != "Unreadable",
+         `2` != "Unreadable")
 
 scale_age_df |>
   filter(!(primary_pit_tag %in% primary_pit_tag[duplicated(primary_pit_tag)] &
              age_scales == "Unreadable")) |>
   filter(primary_pit_tag %in% primary_pit_tag[duplicated(primary_pit_tag)]) |>
   arrange(spawn_year,
-          primary_pit_tag)
+          primary_pit_tag) |>
+  select(-sheet_nm,
+         -ptagis_file_name) |>
+  left_join(bio_df |>
+              select(primary_pit_tag = pit_tag,
+                     event_date,
+                     scale_id)) |>
+  arrange(spawn_year,
+          primary_pit_tag,
+          event_date)
+
+# filter out rows for duplicated tags that have "Unreadable" ages
+scale_age_df <-
+  scale_age_df |>
+  filter(!(primary_pit_tag %in% primary_pit_tag[duplicated(primary_pit_tag)] &
+             age_scales == "Unreadable")) |>
+  # for one tag with multiple ages, choose W1.2 (Mike Hughes said so)
+  filter(!(primary_pit_tag == "3DD.003D552F68" &
+             age_scales == "R.2"))
+
 
 setdiff(unique(scale_age_df$ptagis_file_name), unique(bio_df$event_file_name))
 setdiff(unique(bio_df$event_file_name[bio_df$spawn_year %in% unique(scale_age_df$spawn_year)]),
@@ -326,13 +231,7 @@ scale_age_df |>
 # which tags don't have scale data associated with them?
 bio_df |>
   filter(spawn_year %in% unique(scale_age_df$spawn_year)) |>
-  full_join(scale_age_df |>
-              filter(!(primary_pit_tag %in% primary_pit_tag[duplicated(primary_pit_tag)] &
-                         age_scales == "Unreadable")) |>
-              group_by(primary_pit_tag) |>
-              filter(!is.na(origin_scales)) |>
-              slice(1) |>
-              ungroup() |>
+  left_join(scale_age_df |>
               mutate(scale_age_data = T) |>
               select(-c(sheet_nm,
                         run_year,
@@ -350,12 +249,53 @@ bio_df |>
          species_run_rear_type,
          age_scales,
          origin_field,
-         origin_scales) |>
-  write_csv(here("outgoing/other/missing_scale_data.csv"))
+         origin_scales) #|>
+  # write_csv(here("outgoing/other/missing_scale_data.csv"))
   # mutate(event_month = month(event_date,
   #                            label = T)) |>
   # tabyl(spawn_year, event_month) |>
   # adorn_totals(where = "both")
+
+# looking for mismatches between scale origins and SRR calls
+# These should probably be fixed in PTAGIS?
+bio_df |>
+  left_join(scale_age_df |>
+              select(spawn_year,
+                     pit_tag = primary_pit_tag,
+                     age_scales,
+                     origin_field,
+                     origin_scales),
+            by = join_by(spawn_year,
+                         pit_tag)) |>
+  mutate(origin = str_extract(species_run_rear_type, "[:alpha:]$")) |>
+  select(spawn_year,
+         event_date,
+         pit_tag,
+         species_run_rear_type,
+         starts_with("origin")) |>
+  filter(spawn_year %in% unique(scale_age_df$spawn_year),
+         origin != origin_scales) |>
+  write_csv(here("analysis/data/derived_data",
+                 "mismatch_origin.csv"))
+
+
+
+#-----------------------------------------
+# add scale data to bio_df
+bio_df <-
+  bio_df |>
+  left_join(scale_age_df |>
+              select(spawn_year,
+                     pit_tag = primary_pit_tag,
+                     # scale_id,
+                     age_scales,
+                     origin_field,
+                     origin_scales),
+            by = join_by(spawn_year,
+                         pit_tag)) |>
+  mutate(origin = str_extract(species_run_rear_type, "[:alpha:]$"))
+
+
 
 #-----------------------------------------------------------------
 # save as Excel file
