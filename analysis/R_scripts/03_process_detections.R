@@ -32,8 +32,8 @@ yr = 2023
 #   filter(year == yr)
 
 bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2023.rds')) %>%
-  filter(year == yr) #|>
-  # rename(tag_code = pit_tag)
+  filter(year == yr) |>
+  rename(tag_code = pit_tag)
 
 # bio_df <-
 #   read_excel(here('analysis/data/derived_data',
