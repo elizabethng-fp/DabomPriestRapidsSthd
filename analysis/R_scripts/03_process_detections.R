@@ -193,7 +193,8 @@ wdfw_df <-
                     ".xlsx")) |>
   mutate(across(c(duration,
                   travel_time),
-                ~ as.difftime(., units = "mins")))
+                ~ as.difftime(., units = "mins"))) |>
+  select(all_of(names(prepped_ch)))
 
 identical(n_distinct(prepped_ch$tag_code),
           n_distinct(wdfw_df$tag_code))
