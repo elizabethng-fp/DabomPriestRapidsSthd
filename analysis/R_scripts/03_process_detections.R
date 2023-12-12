@@ -204,21 +204,23 @@ nrow(prepped_ch)
 
 
 # update with new node codes
-wdfw_df <-
-  wdfw_df |>
-  mutate(across(c(node,
-                  path,
-                  tag_detects),
-                ~ str_replace_all(., "B0", "_D")),
-         across(c(node,
-                  path,
-                  tag_detects),
-                ~ str_replace_all(., "A0", "_U")),
-         across(c(node),
-                ~ str_replace_all(., "^S_U", "SA0")),
-         across(c(tag_detects,
-                  path),
-                ~ str_replace_all(., " S_U", " SA0")))
+if(sum(str_detect(wdfw_df$node, "B0$")) > 0) {
+  wdfw_df <-
+    wdfw_df |>
+    mutate(across(c(node,
+                    path,
+                    tag_detects),
+                  ~ str_replace_all(., "B0", "_D")),
+           across(c(node,
+                    path,
+                    tag_detects),
+                  ~ str_replace_all(., "A0", "_U")),
+           across(c(node),
+                  ~ str_replace_all(., "^S_U", "SA0")),
+           across(c(tag_detects,
+                    path),
+                  ~ str_replace_all(., " S_U", " SA0")))
+}
 
 # what rows are in prepped_ch but not in wdfw_df?
 prepped_ch |>
@@ -240,7 +242,7 @@ prepped_ch |>
   anti_join(wdfw_df) |>
   select(tag_code) |>
   distinct() |>
-  slice(10) |>
+  slice(1) |>
   left_join(prepped_ch |>
               select(tag_code:max_det,
                      auto_keep_obs,
