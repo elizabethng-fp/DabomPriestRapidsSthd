@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: prep and run DABOM
 # Created: 4/1/20
-# Last Modified: 8/30/23
+# Last Modified: 11/22/23
 # Notes:
 
 #-----------------------------------------------------------------
@@ -22,25 +22,26 @@ load(here('analysis/data/derived_data/site_config.rda'))
 # Load required DABOM data
 #-----------------------------------------------------------------
 # set year
-yr = 2022
+yr = 2023
 
 # for(yr in 2011:2022) {
   cat(paste("Working on", yr, "\n\n"))
 
-  # load and filter biological data
-  bio_df = read_rds(here('analysis/data/derived_data',
-                         'Bio_Data_2011_2022.rds')) %>%
-    filter(year == yr)
+  # # load and filter biological data
+  # bio_df = read_rds(here('analysis/data/derived_data',
+  #                        'Bio_Data_2011_2022.rds')) %>%
+  #   filter(year == yr)
 
   # load processed detection histories
   load(here('analysis/data/derived_data/PITcleanr',
             paste0('UC_Steelhead_', yr, '.rda')))
 
   # filter to keep only the observations you want to keep
-  filter_obs = prepped_ch %>%
-    mutate(user_keep_obs = if_else(is.na(user_keep_obs),
-                                   auto_keep_obs,
-                                   user_keep_obs)) %>%
+  filter_obs = prepped_ch |>
+    mutate(across(user_keep_obs,
+                  ~ if_else(is.na(.),
+                            auto_keep_obs,
+                            .))) |>
     filter(user_keep_obs)
 
 
@@ -74,6 +75,7 @@ yr = 2022
                  filter_ch = filter_obs,
                  parent_child = parent_child,
                  configuration = configuration,
+                 by_origin = FALSE,
                  fish_origin = fish_origin)
 
   #------------------------------------------------------------------------------
@@ -104,7 +106,7 @@ yr = 2022
 
 
   #--------------------------------------
-  # test the MCMC outcome and summary functions
+  # take MCMC samples from the posteriors
   dabom_mod = coda.samples(jags,
                            jags_params,
                            # n.iter = 10)
@@ -203,7 +205,8 @@ post_summ(my_mod,
 
 
 
-param_chk = c('psi_RRF')
+param_chk = c('psi_RRF',
+              'psi_MRC')
 param_chk = convg_df %>%
   filter(!converged) %>%
   pull(parameter)

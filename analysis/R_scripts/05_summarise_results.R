@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: summarize DABOM results
 # Created: 4/1/20
-# Last Modified: 11/30/2022
+# Last Modified: 11/28/2023
 # Notes:
 
 #-----------------------------------------------------------------
@@ -33,7 +33,7 @@ load(here('analysis/data/derived_data',
 
 #-----------------------------------------------------------------
 # set year
-yr = 2022
+yr = 2023
 
 # what dam count to use?
 dam_cnt_name = c("PriestRapids",
@@ -42,7 +42,7 @@ dam_cnt_name = c("PriestRapids",
 
 #-----------------------------------------------------------------
 # run for set of years
-for(yr in 2011:2022) {
+for(yr in 2011:2023) {
 
   cat(paste("Working on", yr, "\n\n"))
 
@@ -72,25 +72,22 @@ for(yr in 2011:2022) {
 
   # look at which branch each tag was assigned to for spawning
   brnch_df = buildNodeOrder(addParentChildNodes(parent_child, configuration)) %>%
-    separate(col = path,
-             into = paste("step", 1:max(.$node_order), sep = "_"),
-             remove = F) %>%
     mutate(group = if_else(node == "PRA",
                            "Start",
-                           if_else(grepl('LWE', path) | node %in% c("CLK"),
+                           if_else(str_detect(path, 'LWE') | node %in% c("CLK"),
                                    "Wenatchee",
-                                   if_else(grepl("ENL", path),
+                                   if_else(str_detect(path, "ENL"),
                                            "Entiat",
-                                           if_else(grepl("LMR", path),
+                                           if_else(str_detect(path, "LMR"),
                                                    "Methow",
-                                                   if_else(grepl("OKL", path) | node %in% c("FST"),
+                                                   if_else(str_detect(path, "OKL") | node %in% c("FST"),
                                                            "Okanogan",
-                                                           if_else(step_2 != "RIA" & !is.na(step_2),
+                                                           if_else(str_detect(path, "RIA$", negate = T) &
+                                                                     str_detect(path, " "),
                                                                    "BelowPriest",
                                                                    if_else(node == "WEA",
                                                                            "WellsPool",
                                                                            "Other")))))))) %>%
-    select(-starts_with("step")) %>%
     mutate(group = factor(group,
                           levels = c("Wenatchee",
                                      "Entiat",
@@ -123,7 +120,8 @@ for(yr in 2011:2022) {
 
   # compile all movement probabilities, and multiply them appropriately
   trans_df = compileTransProbs(dabom_mod,
-                               parent_child) %>%
+                               parent_child,
+                               configuration) %>%
     mutate(origin = recode(origin,
                            "2" = "H",
                            "1" = "W"))
@@ -232,7 +230,7 @@ for(yr in 2011:2022) {
     # add re-ascension data
     mutate(reasc_df = map(pit_code,
                           .f = function(x) {
-                            dart_df = try(suppressMessages(queryPITtagData(damPIT = x,
+                            dart_df = try(suppressMessages(STADEM::queryPITtagData(damPIT = x,
                                                                            spp = "Steelhead",
                                                                            start_date = start_date,
                                                                            end_date = end_date)))
@@ -349,7 +347,7 @@ for(yr in 2011:2022) {
   for(dam_cnt_name in c("PriestRapids",
                         "RockIsland")) {
 
-    cat(paste("\t Using", dam_cnt_name, " dam \n\n"))
+    cat(paste("\t Using", dam_cnt_name, "dam \n\n"))
 
     org_escape <- dam_escp_df %>%
       filter(dam == dam_cnt_name) %>%
@@ -417,8 +415,8 @@ for(yr in 2011:2022) {
       mutate(across(c(mean, median, mode, sd, matches('CI$')),
                     ~ if_else(. < 0, 0, .))) %>%
       mutate(across(c(mean, median, mode, sd, skew, kurtosis, matches('CI$')),
-                    round,
-                    digits = 2)) %>%
+                    ~ round(.,
+                            digits = 2))) %>%
       arrange(desc(origin), location) %>%
       tibble::add_column(species = "Steelhead",
                          spawn_year = yr,
