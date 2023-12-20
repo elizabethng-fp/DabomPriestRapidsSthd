@@ -364,16 +364,16 @@ tag_list <-
 
 # save tags to upload to PTAGIS
 # all years
-for(yr in tag_list$year) {
-  tag_list |>
-    filter(year == yr) |>
-    pull(data) |>
-    extract2(1) |>
-    write_delim(file = here('analysis/data/raw_data/tag_lists',
-                            paste0('test_UC_Sthd_Tags_', yr, '.txt')),
-                delim = '\n',
-                col_names = F)
-}
+# for(yr in tag_list$year) {
+#   tag_list |>
+#     filter(year == yr) |>
+#     pull(data) |>
+#     extract2(1) |>
+#     write_delim(file = here('analysis/data/raw_data/tag_lists',
+#                             paste0('test_UC_Sthd_Tags_', yr, '.txt')),
+#                 delim = '\n',
+#                 col_names = F)
+# }
 
 # just write the latest year
 tag_list |>
