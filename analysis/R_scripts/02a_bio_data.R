@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: create tag lists to feed to PTAGIS query
 # Created: 8/15/2023
-# Last Modified: 11/21/2023
+# Last Modified: 12/20/2023
 # Notes:
 
 #-----------------------------------------------------------------
@@ -19,7 +19,7 @@ library(here)
 # uses a complete tag history of marks/recaptures at PRD or PRDLD1
 sthd_tags <- read_csv(here("analysis/data/raw_data",
                            "tagging_recapture",
-                           "Priest Rapids Mark_Recapture 2011-2023.csv"),
+                           "PriestRapids_Mark_Recapture_2011_2023.csv"),
                       show_col_types = F) |>
   clean_names() |>
   mutate(across(contains("_date_mm"),
@@ -98,40 +98,64 @@ bio_df <-
   filter(str_detect(species_run_rear_type, "^3"),
          str_detect(pit_tag, "\\.\\.\\.", negate = T)) |>
   arrange(year,
-          event_date)
+          event_date) |>
+  mutate(across(poh,
+                as.numeric)) |>
+  # assign sex based on conditional comments
+  mutate(sex = case_when(str_detect(conditional_comments, "FE") ~ "Female",
+                         str_detect(conditional_comments, "MA") ~ "Male",
+                         .default = NA_character_)) |>
+  # determine CWT and ad-clip status from conditional comments
+  mutate(cwt = if_else(str_detect(conditional_comments, "CP") |
+                         str_detect(conditional_comments, "CW"),
+                       T, F),
+         ad_clip = case_when(str_detect(conditional_comments, "AD") ~ T,
+                             str_detect(conditional_comments, "AI") ~ F,
+                             .default = NA))
 
-
-bio_df |>
-  group_by(spawn_year) |>
-  summarize(n_mrr_tags = n_distinct(pit_tag),
-            n_2tag = sum(!is.na(second_pit_tag)),
-            .groups = "drop") |>
-  full_join(sthd_tags |>
-              group_by(spawn_year) |>
-              summarize(n_sthd_tags = n_distinct(tag_code),
-                        .groups = "drop")) |>
-  mutate(diff = n_mrr_tags - n_sthd_tags)
-
-yr = 2015
-bio_df |>
-  filter(spawn_year == yr) |>
-  anti_join(sthd_tags |>
-              filter(spawn_year == yr) |>
-              select(pit_tag = tag_code)) |>
-  as.data.frame()
-
-
-bio_df |>
-  filter(pit_tag %in% pit_tag[duplicated(pit_tag)]) |>
-  arrange(pit_tag, event_date) |>
-  select(year,
-         event_file_name,
+# some second PIT tags only appear in text comments
+second_tags <-
+  bio_df |>
+  filter(str_detect(text_comments, coll("same as", ignore_case = T))) |>
+  mutate(text_code = str_split(text_comments, coll("same as", ignore_case = T), simplify = T)[,2],
+         across(text_code,
+                ~ str_remove(., "\\#")),
+         across(text_code,
+                ~ str_remove(., "SD$")),
+         across(text_code,
+                str_squish),
+         across(text_code,
+                ~ str_remove(., " ")),
+         across(text_code,
+                str_to_upper),
+         across(text_code,
+                ~ if_else(str_detect(text_code, "^3", negate = T),
+                          paste0("3D9.", .),
+                          .))) |>
+  select(spawn_year,
          pit_tag,
-         event_date,
-         event_type) |>
-  filter(year == 2023)
+         second_pit_tag,
+         text_comments,
+         text_code)
 
-#-----------------------------------------------------------------
+bio_df <-
+  bio_df |>
+  left_join(second_tags |>
+              select(spawn_year,
+                     pit_tag,
+                     text_code)) |>
+  mutate(across(second_pit_tag,
+                ~ if_else(is.na(.) & !is.na(text_code),
+                          text_code,
+                          .))) |>
+  select(-text_code)
+
+
+bio_df |>
+  tabyl(spawn_year, ad_clip)
+bio_df |>
+  tabyl(spawn_year, cwt)
+
 tabyl(bio_df,
       year,
       species_run_rear_type) |>
@@ -140,7 +164,9 @@ tabyl(bio_df,
 
 #-----------------------------------------------------------------
 # add age and final origin data from scales
-scale_age_file <- "T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/inputs/Bio Data/PIT Tag PRD Scale Ages Run Years 2022 to present.xlsx"
+# scale_age_file <- "T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/inputs/Bio Data/PIT Tag PRD Scale Ages Run Years 2022 to present.xlsx"
+
+scale_age_file <- "T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/inputs/Bio Data/PIT Tag PRD Scale Ages Spawn Years 2011 to present.xlsx"
 
 scale_age_df <-
   tibble(sheet_nm = excel_sheets(scale_age_file)) |>
@@ -170,46 +196,45 @@ scale_age_df <-
 # which PIT tags are duplciated?
 # and what are the ages associated with those?
 scale_age_df |>
-  filter(primary_pit_tag %in% primary_pit_tag[duplicated(primary_pit_tag)]) |>
-  arrange(spawn_year,
-          primary_pit_tag) |>
+  unite(sy_pit,
+        spawn_year, primary_pit_tag,
+        remove = F) |>
+  filter(sy_pit %in% sy_pit[duplicated(sy_pit)]) |>
+  arrange(primary_pit_tag,
+          spawn_year) |>
   select(spawn_year,
          primary_pit_tag,
          age_scales) |>
-  group_by(primary_pit_tag) |>
+  group_by(spawn_year,
+           primary_pit_tag) |>
   mutate(n_rec = 1:n()) |>
   ungroup() |>
   pivot_wider(names_from = n_rec,
-              values_from = age_scales) |>
+              values_from = age_scales)# |>
   filter(`1` != "Unreadable",
          `2` != "Unreadable")
-
-scale_age_df |>
-  filter(!(primary_pit_tag %in% primary_pit_tag[duplicated(primary_pit_tag)] &
-             age_scales == "Unreadable")) |>
-  filter(primary_pit_tag %in% primary_pit_tag[duplicated(primary_pit_tag)]) |>
-  arrange(spawn_year,
-          primary_pit_tag) |>
-  select(-sheet_nm,
-         -ptagis_file_name) |>
-  left_join(bio_df |>
-              select(primary_pit_tag = pit_tag,
-                     event_date,
-                     scale_id)) |>
-  arrange(spawn_year,
-          primary_pit_tag,
-          event_date)
 
 # filter out rows for duplicated tags that have "Unreadable" ages
 scale_age_df <-
   scale_age_df |>
-  filter(!(primary_pit_tag %in% primary_pit_tag[duplicated(primary_pit_tag)] &
-             age_scales == "Unreadable")) |>
+  unite(sy_pit,
+        spawn_year, primary_pit_tag,
+        remove = F) |>
+  filter(!(sy_pit %in% sy_pit[duplicated(sy_pit)] &
+           age_scales == "Unreadable")) |>
   # for one tag with multiple ages, choose W1.2 (Mike Hughes said so)
   filter(!(primary_pit_tag == "3DD.003D552F68" &
-             age_scales == "R.2"))
+             age_scales == "R.2")) |>
+  select(-sy_pit)
 
+# any more duplicated SY / tags?
+scale_age_df |>
+  unite(sy_pit,
+        spawn_year, primary_pit_tag,
+        remove = F) |>
+  filter(sy_pit %in% sy_pit[duplicated(sy_pit)])
 
+# differences in PTAGIS file names
 setdiff(unique(scale_age_df$ptagis_file_name), unique(bio_df$event_file_name))
 setdiff(unique(bio_df$event_file_name[bio_df$spawn_year %in% unique(scale_age_df$spawn_year)]),
         unique(scale_age_df$ptagis_file_name))
@@ -232,29 +257,40 @@ scale_age_df |>
 bio_df |>
   filter(spawn_year %in% unique(scale_age_df$spawn_year)) |>
   left_join(scale_age_df |>
-              mutate(scale_age_data = T) |>
-              select(-c(sheet_nm,
-                        run_year,
-                        ptagis_file_name)),
+              select(spawn_year,
+                     pit_tag = primary_pit_tag,
+                     age_scales) |>
+              mutate(age_data_exists_v1 = T),
             by = join_by(spawn_year,
-                         pit_tag == primary_pit_tag)) |>
-  filter(is.na(scale_age_data)) %>%
+                         pit_tag)) |>
+  left_join(scale_age_df |>
+              select(spawn_year,
+                     second_pit_tag = primary_pit_tag,
+                     age_scales_v2 = age_scales) |>
+              mutate(age_data_exists_v2 = T),
+            by = join_by(spawn_year,
+                         second_pit_tag)) |>
+  mutate(across(starts_with("age_data_exists"),
+                ~ replace_na(., F))) |>
+  mutate(age_data_exists = if_else(age_data_exists_v1 | age_data_exists_v2, T, F),
+         age_scales = if_else(is.na(age_scales) & !is.na(age_scales_v2),
+                              age_scales_v2,
+                              age_scales)) |>
+  filter(!age_data_exists) |>
   arrange(event_date,
           pit_tag) |>
   select(spawn_year,
          pit_tag,
+         species_run_rear_type,
          event_date,
          event_type,
          contains("comments"),
-         species_run_rear_type,
-         age_scales,
-         origin_field,
-         origin_scales) #|>
+         age_scales) |>
   # write_csv(here("outgoing/other/missing_scale_data.csv"))
-  # mutate(event_month = month(event_date,
-  #                            label = T)) |>
-  # tabyl(spawn_year, event_month) |>
-  # adorn_totals(where = "both")
+  mutate(event_month = month(event_date,
+                             label = T)) |>
+  tabyl(spawn_year, event_month) |>
+  adorn_totals(where = "both")
 
 # looking for mismatches between scale origins and SRR calls
 # These should probably be fixed in PTAGIS?
@@ -271,11 +307,13 @@ bio_df |>
   select(spawn_year,
          event_date,
          pit_tag,
-         species_run_rear_type,
+         SRR = species_run_rear_type,
+         conditional_comments,
+         text_comments,
          starts_with("origin")) |>
   filter(spawn_year %in% unique(scale_age_df$spawn_year),
-         origin != origin_scales) |>
-  write_csv(here("analysis/data/derived_data",
+         origin != origin_scales) #|>
+  write_csv(here("outgoing/other",
                  "mismatch_origin.csv"))
 
 
@@ -288,9 +326,7 @@ bio_df <-
               select(spawn_year,
                      pit_tag = primary_pit_tag,
                      # scale_id,
-                     age_scales,
-                     origin_field,
-                     origin_scales),
+                     age_scales),
             by = join_by(spawn_year,
                          pit_tag)) |>
   mutate(origin = str_extract(species_run_rear_type, "[:alpha:]$"))
@@ -303,7 +339,7 @@ bio_df <-
 bio_df %>%
   split(list(.$year)) %>%
   write_xlsx(path = here('analysis/data/derived_data',
-                         'PRA_Sthd_BioData_v2.xlsx'))
+                         'PRA_Sthd_BioData.xlsx'))
 
 #-----------------------------------------------------------------
 # for tag lists
@@ -327,17 +363,17 @@ tag_list <-
   nest(.by = year)
 
 # save tags to upload to PTAGIS
-# # all years
-# for(yr in tag_list$year) {
-#   tag_list |>
-#     filter(year == yr) |>
-#     pull(data) |>
-#     extract2(1) |>
-#     write_delim(file = here('analysis/data/raw_data/tag_lists',
-#                             paste0('test_UC_Sthd_Tags_', yr, '.txt')),
-#                 delim = '\n',
-#                 col_names = F)
-# }
+# all years
+for(yr in tag_list$year) {
+  tag_list |>
+    filter(year == yr) |>
+    pull(data) |>
+    extract2(1) |>
+    write_delim(file = here('analysis/data/raw_data/tag_lists',
+                            paste0('test_UC_Sthd_Tags_', yr, '.txt')),
+                delim = '\n',
+                col_names = F)
+}
 
 # just write the latest year
 tag_list |>
@@ -348,6 +384,112 @@ tag_list |>
                           paste0('UC_Sthd_Tags_', max_yr, '.txt')),
               delim = '\n',
               col_names = F)
+
+
+
+#-----------------------------------------------------------------
+# reduce to one row per tag / spawn year
+bio_df |>
+  group_by(spawn_year,
+           pit_tag,
+           species_run_rear_type) |>
+  summarize(
+    # across(second_pit_tag,
+    #        ~ unique(.[. != pit_tag])),
+    # across(event_file_name,
+    #        ~ .[event_date == max(event_date)]),
+    across(event_date,
+           max),
+    # across(c(length,
+    #          poh),
+    #        ~ pmax(., na.rm = T)),
+    # across(conditional_comments,
+    #        ~ .[nchar(.) == max(nchar(.))]),
+    across(c(ad_clip,
+             cwt),
+           ~ if_else(sum(., na.rm = T) > 0,
+                     T, F)),
+    .groups = "drop") |>
+  filter(pit_tag == "3D9.1C2D8E7B7A")
+
+bio_df |>
+  group_by(spawn_year,
+           pit_tag,
+           species_run_rear_type) |>
+  reframe(across(sex,
+                 ~ case_when(sum(!is.na(.)) > 0 ~ unique(.[!is.na(.)]),
+                             sum(!is.na(.)) == 0 ~ NA_character_,
+                             .default = NA_character_))) |>
+  filter(pit_tag %in% pit_tag[duplicated(pit_tag)])
+  # reframe(across(second_pit_tag,
+  #                ~ unique(.[. != pit_tag & !is.na(.)])))
+  # reframe(across(event_file_name,
+  #                ~ .[event_date == max(event_date)]))
+
+
+bio_df |>
+  group_by(spawn_year,
+           pit_tag,
+           species_run_rear_type) |>
+  reframe(
+    across(second_pit_tag,
+           ~ unique(.[. != pit_tag]))) |>
+  full_join(bio_df |>
+              group_by(spawn_year,
+                       pit_tag,
+                       species_run_rear_type) |>
+              reframe(
+                across(event_file_name,
+                       ~ .[event_date == max(event_date)][1])),
+            by = join_by(spawn_year, pit_tag, species_run_rear_type),
+            relationship = "many-to-many") |>
+  full_join(bio_df |>
+              group_by(spawn_year,
+                       pit_tag,
+                       species_run_rear_type) |>
+              reframe(
+                across(c(length,
+                         poh),
+                       ~ max(., na.rm = T) |>
+                         suppressWarnings())) |>
+              mutate(across(c(length,
+                              poh),
+                            ~ if_else(. == -Inf,
+                                      NA_real_,
+                                      .))),
+            by = join_by(spawn_year, pit_tag, species_run_rear_type),
+            relationship = "many-to-many") |>
+  full_join(bio_df |>
+              group_by(spawn_year,
+                       pit_tag,
+                       species_run_rear_type) |>
+              reframe(
+                across(conditional_comments,
+                       ~ .[nchar(.) == max(nchar(.))])),
+            by = join_by(spawn_year, pit_tag, species_run_rear_type),
+            relationship = "many-to-many") |>
+  distinct() |>
+  filter(pit_tag %in% pit_tag[duplicated(pit_tag)]) |>
+  arrange(pit_tag,
+          spawn_year)
+
+bio_df |>
+  filter(pit_tag == "384.3B239AA19D") |>
+  select(pit_tag,
+         event_date,
+         event_site,
+         event_type,
+         conditional_comments)
+
+
+
+bio_df |>
+  filter(!is.na(second_pit_tag)) |>
+  select(spawn_year,
+         pit_tag,
+         second_pit_tag,
+         event_date,
+         release_date)
 
 #-----------------------------------------------------------------
 # save biological data for later
