@@ -331,8 +331,6 @@ bio_df <-
                          pit_tag)) |>
   mutate(origin = str_extract(species_run_rear_type, "[:alpha:]$"))
 
-
-
 #-----------------------------------------------------------------
 # save as Excel file
 #-----------------------------------------------------------------
@@ -370,7 +368,7 @@ tag_list <-
 #     pull(data) |>
 #     extract2(1) |>
 #     write_delim(file = here('analysis/data/raw_data/tag_lists',
-#                             paste0('test_UC_Sthd_Tags_', yr, '.txt')),
+#                             paste0('UC_Sthd_Tags_', yr, '.txt')),
 #                 delim = '\n',
 #                 col_names = F)
 # }
