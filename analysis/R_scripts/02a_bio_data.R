@@ -53,6 +53,8 @@ tagging_df <-
   select(spawn_year,
          event_file_name) |>
   distinct() |>
+  # filter out one tagging file that is not a WDFW project
+  filter(event_file_name != "CLD14105.WA1") |>
   arrange(spawn_year,
           event_file_name) |>
   # slice(1:6) |>
