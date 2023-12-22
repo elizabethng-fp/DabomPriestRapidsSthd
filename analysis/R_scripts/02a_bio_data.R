@@ -111,7 +111,12 @@ tagging_df <-
                        T, F),
          ad_clip = case_when(str_detect(conditional_comments, "AD") ~ T,
                              str_detect(conditional_comments, "AI") ~ F,
-                             .default = NA))
+                             .default = NA)) |>
+  # correct any lengths that were mistakenly entered as cm, convert to mm
+  mutate(across(length,
+                ~ if_else(. < 100,
+                          . * 10,
+                          .)))
 
 # some second PIT tags only appear in text comments
 second_tags <-
@@ -639,7 +644,9 @@ bio_df |>
               add_column(source = "updated",
                          .before = 0))
 
-bio_df = new_bio
+bio_df = new_bio |>
+  rename(age = age_scales,
+         fork_length = length)
 
 #-----------------------------------------------------------------
 # save as Excel file
