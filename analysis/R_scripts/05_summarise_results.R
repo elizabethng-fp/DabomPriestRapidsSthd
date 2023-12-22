@@ -61,6 +61,14 @@ for(yr in 2011:2023) {
   load(here("analysis/data/derived_data/model_fits",
             paste0('PRA_DABOM_Steelhead_', yr,'.rda')))
 
+  # read in updated biological data
+  bio_df <- read_rds(here('analysis/data/derived_data',
+                          'Bio_Data_2011_2023.rds')) |>
+    filter(spawn_year == yr) |>
+    rename(tag_code = pit_tag,
+           age = age_scales,
+           fork_length = length)
+
 
   # estimate final spawning location
   tag_summ = summarizeTagData(filter_obs,
@@ -82,7 +90,7 @@ for(yr in 2011:2023) {
                                                    "Methow",
                                                    if_else(str_detect(path, "OKL") | node %in% c("FST"),
                                                            "Okanogan",
-                                                           if_else(str_detect(path, "RIA$", negate = T) &
+                                                           if_else(str_detect(path, "RIA", negate = T) &
                                                                      str_detect(path, " "),
                                                                    "BelowPriest",
                                                                    if_else(node == "WEA",
@@ -448,7 +456,7 @@ for(yr in 2011:2023) {
 
 #-----------------------------------------------------------------
 # run for set of years
-for(yr in 2011:2022) {
+for(yr in 2011:2023) {
 
   cat(paste("Summarizing year", yr, "\n\n"))
 
@@ -477,8 +485,8 @@ for(yr in 2011:2022) {
                      origin,
                      nesting(sex, age))) %>%
     mutate(across(n_tags,
-                  replace_na,
-                  0)) %>%
+                  ~ replace_na(.,
+                               0))) %>%
     group_by(group, origin) %>%
     mutate(tot_tags = sum(n_tags)) %>%
     ungroup() %>%
@@ -550,8 +558,10 @@ for(yr in 2011:2022) {
                                 cov = diag(c(escp_se, prop_se)^2))) %>%
     ungroup() %>%
     mutate(across(est,
-                  ~ as.integer(round(est)))) %>%
-    select(species:origin, sex, age, n_tags, mean_FL, starts_with("prop"), starts_with("est"))
+                  ~ as.integer(round(.)))) %>%
+    select(species:origin, sex, age, n_tags, mean_FL,
+           starts_with("prop"),
+           starts_with("est"))
 
   #------------------------------------------------------------
   # sex proportions by origin
@@ -757,38 +767,54 @@ for(yr in 2011:2022) {
   # break down hatchery estimates by mark type
   #-----------------------------------------------------------------
   mark_tag_summ = tag_summ %>%
+    filter(!is.na(ad_clip)) |>
     # filter(origin == "H") %>%
-    mutate(cwt = if_else(is.na(cwt), F,
-                         if_else(cwt %in% c("SN", "BD"),
-                                 T, NA)),
-           ad_clip = if_else(is.na(ad_clip), F,
-                             if_else(ad_clip == "AD", T, NA))) %>%
+    # mutate(cwt = if_else(is.na(cwt), F,
+    #                      if_else(cwt %in% c("SN", "BD"),
+    #                              T, NA)),
+    #        ad_clip = if_else(is.na(ad_clip), F,
+    #                          if_else(ad_clip == "AD", T, NA))) %>%
     mutate(ad_clip_chr = recode(as.character(ad_clip),
                                 "TRUE" = "AD",
                                 "FALSE" = "AI"),
            cwt_chr = recode(as.character(cwt),
                             "TRUE" = "CWT",
                             "FALSE" = "noCWT")) %>%
+    mutate(across(cwt,
+                  ~ if_else(origin == "W",
+                            F,
+                            .)),
+           across(cwt_chr,
+                  ~ if_else(origin == "W",
+                            "noCWT",
+                            .))) |>
     tidyr::unite("mark_grp", ad_clip_chr, cwt_chr, remove = T) %>%
     mutate(mark_grp = if_else(origin == "W",
                               "Wild",
                               mark_grp))
 
   # proportions of each type of fish (H/W, Ad-clip, CWT combinations) past each site
+  node_order <- buildNodeOrder(parent_child)
+
   mark_grp_prop = mark_tag_summ %>%
-    mutate(spawn_site = str_remove(spawn_node, "B0$"),
-           spawn_site = str_remove(spawn_site, "A0$"),
-           spawn_site = recode(spawn_site,
-                               "S" = "SA0")) %>%
-    left_join(buildPaths(parent_child) %>%
+    # mutate(spawn_site = str_remove(spawn_node, "B0$"),
+    #        spawn_site = str_remove(spawn_site, "A0$"),
+    #        spawn_site = recode(spawn_site,
+    #                            "S" = "SA0")) %>%
+    mutate(spawn_site = str_remove(final_node, "_U"),
+           across(spawn_site,
+                  ~ str_remove(., "_D"))) |>
+    left_join(node_order |>
                 separate(path,
-                         into = paste("site", 1:8, sep = "_")) %>%
+                         into = paste("site", 1:max(node_order$node_order), sep = "_")) |>
                 pivot_longer(starts_with('site_'),
-                             names_to = "node_order",
+                             names_to = "name",
                              values_to = "site_code") %>%
                 filter(!is.na(site_code)) %>%
-                select(-node_order),
-              by = c("spawn_site" = "end_loc")) %>%
+                select(spawn_site = node,
+                       site_code),
+              by = join_by(spawn_site),
+              relationship = "many-to-many") %>%
     group_by(origin, site_code, ad_clip, cwt, mark_grp) %>%
     summarise(n_tags = n_distinct(tag_code),
               .groups = "drop") %>%
