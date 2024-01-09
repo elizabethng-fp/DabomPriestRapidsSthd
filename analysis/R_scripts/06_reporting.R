@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: format results to be saved
 # Created: 11/30/22
-# Last Modified: 8/31/2023
+# Last Modified: 1/8/2024
 # Notes:
 
 #-----------------------------------------------------------------
@@ -48,7 +48,7 @@ makeTableNms = function(df) {
 
 #-----------------------------------------------------------------
 # set the highest year to be included
-max_yr = 2022
+max_yr = 2023
 # max_yr = lubridate::year(lubridate::today()) - 1
 
 #-----------------------------------------------------------------
@@ -69,6 +69,7 @@ spwn_est <- crossing(population = c("Wenatchee",
   select(run_year, spawn_year, population) %>%
   filter(!(population == "Methow" &
              spawn_year < 2021)) %>%
+  filter(spawn_year == max_yr) |>
   mutate(results_list = map2(spawn_year,
                              population,
                              .f = possibly(function(yr, pop) {
@@ -118,6 +119,12 @@ spwn_est <- crossing(population = c("Wenatchee",
                                         value = T) |>
                                  pivot_wider(names_from = origin,
                                              values_from = value)
+
+                               if(nrow(trib_NAs) == 0) {
+                                 trib_NAs <- tibble(river = NA_character_,
+                                                    na_hos = NA,
+                                                    na_nos = NA)
+                               }
 
                                # for 2020, we'll need to do something different
                                if(yr != 2020) {
@@ -324,7 +331,8 @@ spwn_est <- crossing(population = c("Wenatchee",
                                      mutate(across(river,
                                                    ~ recode(.,
                                                             "Wenatchee" = "Wenatchee (mainstem)",
-                                                            "Methow" = "Lower Methow (mainstem)")),
+                                                            "Methow" = "Lower Methow (mainstem)",
+                                                            "Lower Methow" = "Lower Methow (mainstem)")),
                                             across(river,
                                                    as.factor),
                                             across(river,
@@ -644,6 +652,11 @@ dabom_df <-
   mutate(dam_cnt_name = if_else(spawn_year %in% c(2011:2015, 2018),
                                 "PriestRapids",
                                 "RockIsland"))
+
+dabom_df <-
+  dabom_df |>
+  filter(spawn_year == max_yr)
+
 # get all the tag summaries
 all_tags <-
   dabom_df |>
@@ -652,7 +665,8 @@ all_tags <-
                          .f = function(yr, dam_nm) {
                            sroem::query_dabom_results(dabom_dam_nm = dam_nm,
                                                       query_year = yr,
-                                                      result_type = "tag_summ")
+                                                      result_type = "tag_summ") |>
+                             select(-any_of("spawn_year"))
                          }))
 
 # age proportions
@@ -670,7 +684,6 @@ age_prop <-
                                      recode,
                                      "H" = "Hatchery",
                                      "W" = "Natural")) |>
-                       mutate(run_year = year - 1) |>
                        select(tag_code,
                               population = group,
                               origin,
@@ -698,7 +711,6 @@ age_prop <-
                                                  recode,
                                                  "H" = "Hatchery",
                                                  "W" = "Natural")) |>
-                                   mutate(run_year = year - 1) |>
                                    select(tag_code,
                                           population = group,
                                           origin,
@@ -927,19 +939,41 @@ all_escp <-
   makeTableNms()
 
 # tag summaries
+# # for bio data from WDFW
+# tag_df <- all_tags |>
+#   select(-dam_cnt_name) |>
+#   unnest(tag_summ) |>
+#   select(run_year:tag_code,
+#          species,
+#          record_id,
+#          tag_other,
+#          sex:age,
+#          ad_clip,
+#          cwt,
+#          trap_date,
+#          spawn_node:tag_detects,
+#          path) |>
+#   makeTableNms()
+
+# for bio data from PTAGIS
 tag_df <- all_tags |>
   select(-dam_cnt_name) |>
   unnest(tag_summ) |>
   select(run_year:tag_code,
-         species,
-         record_id,
-         tag_other,
-         sex:age,
+         # species,
+         species_run_rear_type,
+         # record_id,
+         second_pit_tag,
+         sex,
+         age,
          ad_clip,
          cwt,
-         trap_date,
-         spawn_node:tag_detects,
+         trap_date = start_date,
+         final_node:tag_detects,
          path) |>
+  mutate(origin = str_extract(species_run_rear_type, "[:alpha:]$")) |>
+  relocate(origin,
+           .after = species_run_rear_type) |>
   makeTableNms()
 
 # detection probabilities
@@ -1186,18 +1220,27 @@ mark_tag_summ <-
   all_tags |>
   select(-dam_cnt_name) |>
   unnest(tag_summ) |>
-  mutate(cwt = if_else(is.na(cwt), F,
-                       if_else(cwt %in% c("SN", "BD"),
-                               T, NA)),
-         ad_clip = if_else(is.na(ad_clip) | origin == "W",
-                           F,
-                           if_else(ad_clip == "AD", T, NA))) |>
+  filter(!is.na(ad_clip)) |>
+  # mutate(cwt = if_else(is.na(cwt), F,
+  #                      if_else(cwt %in% c("SN", "BD"),
+  #                              T, NA)),
+  #        ad_clip = if_else(is.na(ad_clip) | origin == "W",
+  #                          F,
+  #                          if_else(ad_clip == "AD", T, NA))) |>
   mutate(ad_clip_chr = recode(as.character(ad_clip),
                               "TRUE" = "AD",
                               "FALSE" = "AI"),
          cwt_chr = recode(as.character(cwt),
                           "TRUE" = "CWT",
                           "FALSE" = "noCWT")) |>
+  mutate(across(cwt,
+                ~ if_else(origin == "W",
+                          F,
+                          .)),
+         across(cwt_chr,
+                ~ if_else(origin == "W",
+                          "noCWT",
+                          .))) |>
   tidyr::unite("mark_grp", ad_clip_chr, cwt_chr, remove = T) |>
   mutate(mark_grp = if_else(origin == "W",
                             "Wild",
@@ -1205,7 +1248,7 @@ mark_tag_summ <-
 
 
 mark_tag_summ |>
-  select(run_year:spawn_node,
+  select(run_year:final_node,
          ad_clip,
          cwt,
          group,
@@ -1258,10 +1301,12 @@ site_pop_df = buildNodeOrder(parent_child) |>
          population = group)
 
 mark_grp_prop = mark_tag_summ |>
-  mutate(spawn_site = str_remove(spawn_node, "B0$"),
-         spawn_site = str_remove(spawn_site, "A0$"),
-         spawn_site = recode(spawn_site,
-                             "S" = "SA0")) |>
+  # mutate(spawn_site = str_remove(spawn_node, "B0$"),
+  #        spawn_site = str_remove(spawn_site, "A0$"),
+  #        spawn_site = recode(spawn_site,
+  #                            "S" = "SA0")) |>
+  mutate(spawn_site = str_remove(final_node, "_U$"),
+         spawn_site = str_remove(spawn_site, "_D$")) |>
   left_join(site_pop_df |>
               select(end_loc = site_code,
                      population,
@@ -1490,6 +1535,10 @@ sex_err_rate <- tag_df |>
   select(spawn_year,
          tag_code,
          sex_field = sex) |>
+  mutate(across(sex_field,
+                ~ recode(.,
+                         "Male" = "M",
+                         "Female" = "F"))) |>
   inner_join(read_excel(paste0("T:/DFW-Team FP Upper Columbia Escapement - General/",
                                "UC_Sthd/inputs/Bio Data/",
                                "Sex and Origin PRD-Brood Comparison Data/",
@@ -1534,6 +1583,10 @@ sex_err_rate <- tag_df |>
 sex_prop <-
   sex_prop |>
   clean_names() |>
+  mutate(across(sex,
+                ~ recode(.,
+                         "Male" = "M",
+                         "Female" = "F"))) |>
   # dabom_est |>
   # mutate(res = map(all_results,
   #                  "sex_yr")) |>
@@ -1860,6 +1913,8 @@ save_list <- list(
                   digits = 3)),
 
   "Tag Summary" = tag_df |>
+    mutate(across(where(is.logical),
+                  as.character)) |>
     mutate(across(ends_with("Year"),
                   as.integer)),
 
@@ -1950,7 +2005,7 @@ write_xlsx(x = save_list,
 # read in previous estimates, add latest year to them
 
 # what year are we overwriting or adding?
-yr = 2022
+yr = 2023
 
 library(readxl)
 output_path <- paste0("T:/DFW-Team FP Upper Columbia Escapement - General/",
@@ -1964,7 +2019,12 @@ previous_output <- as.list(tab_nms) |>
   map(.f = function(x) {
     read_excel(output_path,
                sheet = x) %>%
-      filter(`Spawn Year` != yr)
+      filter(`Spawn Year` != yr) |>
+      mutate(
+        across(c(ends_with("Est"),
+                 ends_with("SE"),
+                 ends_with("CV")),
+               as.numeric))
   })
 
 lst_one_yr <- save_list |>
@@ -1975,17 +2035,23 @@ lst_one_yr <- save_list |>
 
 
 
-identical(names(previous_output), names(lst_2022))
+identical(names(previous_output), names(lst_one_yr))
 
-save_list = vector("list",
+save_list_new = vector("list",
                    length = length(previous_output))
-names(save_list) = names(previous_output)
+names(save_list_new) = names(previous_output)
 for(i in 1:length(previous_output)) {
-  save_list[[i]] <- previous_output[[i]] |>
+  save_list_new[[i]] <- previous_output[[i]] |>
     bind_rows(lst_one_yr[[i]]) %>%
     arrange(`Spawn Year`)
 }
 
-write_xlsx(x = save_list,
+# write_xlsx(x = save_list_new,
+#            path = paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/Estimates/",
+#                          "UC_STHD_Model_Output.xlsx"))
+
+write_xlsx(x = save_list_new,
            path = paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/Estimates/",
-                         "UC_STHD_Model_Output.xlsx"))
+                         "UC_STHD_Model_Output_",
+                         format(today(), "%Y%m%d"),
+                         ".xlsx"))
