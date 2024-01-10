@@ -47,6 +47,7 @@ yr = 2023
 
   # determine origin of each fish
   fish_origin = bio_df %>%
+    rename(tag_code = pit_tag) |>
     filter(tag_code %in% unique(filter_obs$tag_code)) %>%
     select(tag_code, origin) %>%
     distinct()

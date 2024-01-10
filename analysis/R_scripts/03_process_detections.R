@@ -23,7 +23,7 @@ library(here)
 load(here('analysis/data/derived_data/site_config.rda'))
 
 # which spawn year are we dealing with?
-yr = 2022
+yr = 2023
 
 # for(yr in 2011:2020) {
 
@@ -32,8 +32,8 @@ yr = 2022
 #   filter(year == yr)
 
 bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2023.rds')) %>%
-  filter(year == yr) |>
-  rename(tag_code = pit_tag)
+  filter(spawn_year == yr) #|>
+  # rename(tag_code = pit_tag)
 
 # bio_df <-
 #   read_excel(here('analysis/data/derived_data',
@@ -45,8 +45,8 @@ bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2023.rds')) %>%
 
 # any double-tagged fish?
 dbl_tag = bio_df %>%
-  filter(!is.na(tag_other))
-  # filter(!is.na(second_pit_tag))
+  # filter(!is.na(tag_other))
+  filter(!is.na(second_pit_tag))
 
 
 #-----------------------------------------------------------------
@@ -256,7 +256,6 @@ prepped_ch |>
   # tail(10)
   # select(-user_keep_obs)
 
-
 # add a few rows back, and correct the user_keep_obs field
 
 if(yr == 2022) {
@@ -285,31 +284,33 @@ if(yr == 2022) {
 
 } else if(yr == 2023) {
 
-  wdfw_df <-
-    prepped_ch |>
-    select(-user_keep_obs) |>
-    full_join(wdfw_df |>
-                select(tag_code:max_det,
-                       user_keep_obs)) |>
-    mutate(
-      across(user_keep_obs,
-             ~ if_else(tag_code %in% c("3DD.003BDDBF78",
-                                       "3DD.003DA28B7A",
-                                       "3DD.003DA28CB1",
-                                       "3DD.003DA28D38",
-                                       "3DD.003DA28EE6",
-                                       "3DD.003DA29002"),
-                       if_else(min_det > ymd(max_obs_date),
-                               F, .),
-                       .)),
-      across(user_keep_obs,
-             ~ if_else(tag_code %in% c("3DD.003DA28C1F",
-                                       "3DD.003DA28C62",
-                                       "3DD.003DA28D42",
-                                       "3DD.003DA28EB0",
-                                       "3DD.003DA28BD1"),
-                       auto_keep_obs, .))) |>
-    filter(!is.na(auto_keep_obs))
+  # wdfw_df <-
+  #   prepped_ch |>
+  #   select(-user_keep_obs) |>
+  #   full_join(wdfw_df |>
+  #               select(tag_code:max_det,
+  #                      user_keep_obs)) |>
+  #   mutate(
+  #     across(user_keep_obs,
+  #            ~ if_else(tag_code %in% c("3DD.003BDDBF78",
+  #                                      "3DD.003DA28B7A",
+  #                                      "3DD.003DA28CB1",
+  #                                      "3DD.003DA28D38",
+  #                                      "3DD.003DA28EE6",
+  #                                      "3DD.003DA29002"),
+  #                      if_else(min_det > ymd(max_obs_date),
+  #                              F, .),
+  #                      .)),
+  #     across(user_keep_obs,
+  #            ~ if_else(tag_code %in% c("3DD.003DA28C1F",
+  #                                      "3DD.003DA28C62",
+  #                                      "3DD.003DA28D42",
+  #                                      "3DD.003DA28EB0",
+  #                                      "3DD.003DA28BD1",
+  #                                      "3DD.003DA28CB3",
+  #                                      "3DD.003D60F2B0"),
+  #                      auto_keep_obs, .))) |>
+  #   filter(!is.na(auto_keep_obs))
 }
 
 tabyl(wdfw_df,
@@ -329,16 +330,14 @@ all_paths = buildPaths(addParentChildNodes(parent_child,
 
 tag_path = summarizeTagData(filter_obs,
                             bio_df %>%
-                              group_by(tag_code = pit_tag) %>%
-                              slice(1) %>%
-                              ungroup()) %>%
+                              rename(tag_code = pit_tag)) %>%
   select(tag_code, final_node) %>%
   distinct() %>%
   left_join(all_paths,
             by = join_by(final_node == end_loc)) %>%
   rename(tag_path = path)
 
-# check if any user definied keep_obs lead to invalid paths
+# check if any user defined keep_obs lead to invalid paths
 error_tags = filter_obs %>%
   left_join(tag_path) %>%
   rowwise() %>%
@@ -378,10 +377,7 @@ tag_summ = summarizeTagData(prepped_ch |>
                                                       auto_keep_obs,
                                                       .))),
                             bio_df %>%
-                              rename(tag_code = pit_tag) |>
-                              group_by(tag_code) %>%
-                              slice(1) %>%
-                              ungroup())
+                              rename(tag_code = pit_tag))
 
 # any duplicated tags?
 sum(duplicated(tag_summ$tag_code))
