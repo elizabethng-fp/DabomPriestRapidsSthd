@@ -45,7 +45,7 @@ sthd_tags <- read_csv(here("analysis/data/raw_data",
 # remove tags that are spawning in a future year
 sthd_tags <-
   sthd_tags |>
-  filter(spawn_year <= year(today()))
+  filter(spawn_year < year(today()))
 
 # pull out MRR data about all steelhead tags
 tagging_df <-
@@ -220,9 +220,10 @@ scale_age_df <-
            .after = "scale_cell") |>
   select(-scale_card,
          -scale_cell) |>
+  rename(age = age_scales) |>
   distinct()
 
-# which PIT tags are duplciated?
+# which PIT tags are duplicated?
 # and what are the ages associated with those?
 scale_age_df |>
   unite(sy_pit,
@@ -233,13 +234,13 @@ scale_age_df |>
           spawn_year) |>
   select(spawn_year,
          primary_pit_tag,
-         age_scales) |>
+         age) |>
   group_by(spawn_year,
            primary_pit_tag) |>
   mutate(n_rec = 1:n()) |>
   ungroup() |>
   pivot_wider(names_from = n_rec,
-              values_from = age_scales)# |>
+              values_from = age)# |>
   filter(`1` != "Unreadable",
          `2` != "Unreadable")
 
@@ -250,10 +251,10 @@ scale_age_df <-
         spawn_year, primary_pit_tag,
         remove = F) |>
   filter(!(sy_pit %in% sy_pit[duplicated(sy_pit)] &
-           age_scales == "Unreadable")) |>
+           age == "Unreadable")) |>
   # for one tag with multiple ages, choose W1.2 (Mike Hughes said so)
   filter(!(primary_pit_tag == "3DD.003D552F68" &
-             age_scales == "R.2")) |>
+             age == "R.2")) |>
   select(-sy_pit)
 
 # any more duplicated SY / tags?
@@ -288,23 +289,23 @@ bio_df |>
   left_join(scale_age_df |>
               select(spawn_year,
                      pit_tag = primary_pit_tag,
-                     age_scales) |>
+                     age) |>
               mutate(age_data_exists_v1 = T),
             by = join_by(spawn_year,
                          pit_tag)) |>
   left_join(scale_age_df |>
               select(spawn_year,
                      second_pit_tag = primary_pit_tag,
-                     age_scales_v2 = age_scales) |>
+                     age_v2 = age) |>
               mutate(age_data_exists_v2 = T),
             by = join_by(spawn_year,
                          second_pit_tag)) |>
   mutate(across(starts_with("age_data_exists"),
                 ~ replace_na(., F))) |>
   mutate(age_data_exists = if_else(age_data_exists_v1 | age_data_exists_v2, T, F),
-         age_scales = if_else(is.na(age_scales) & !is.na(age_scales_v2),
-                              age_scales_v2,
-                              age_scales)) |>
+         age = if_else(is.na(age) & !is.na(age_v2),
+                              age_v2,
+                              age)) |>
   filter(!age_data_exists) |>
   arrange(event_date,
           pit_tag) |>
@@ -314,7 +315,7 @@ bio_df |>
          event_date,
          event_type,
          contains("comments"),
-         age_scales) |>
+         age) |>
   # write_csv(here("outgoing/other/missing_scale_data.csv"))
   mutate(event_month = month(event_date,
                              label = T)) |>
@@ -327,7 +328,7 @@ bio_df |>
   left_join(scale_age_df |>
               select(spawn_year,
                      pit_tag = primary_pit_tag,
-                     age_scales,
+                     age,
                      origin_field,
                      origin_scales),
             by = join_by(spawn_year,
@@ -353,7 +354,7 @@ bio_df <-
               select(spawn_year,
                      pit_tag = primary_pit_tag,
                      # scale_id,
-                     age_scales),
+                     age),
             by = join_by(spawn_year,
                          pit_tag))
 
@@ -384,6 +385,7 @@ bio_df |>
          sex,
          cwt,
          ad_clip,
+         age,
          length,
          conditional_comments)
 
@@ -619,7 +621,7 @@ new_bio <-
   left_join(scale_age_df |>
               select(spawn_year,
                      pit_tag = primary_pit_tag,
-                     age_scales),
+                     age),
             by = join_by(spawn_year,
                          pit_tag))
 
@@ -647,8 +649,7 @@ bio_df |>
                          .before = 0))
 
 bio_df = new_bio |>
-  rename(age = age_scales,
-         fork_length = length)
+  rename(fork_length = length)
 
 #-----------------------------------------------------------------
 # save as Excel file
