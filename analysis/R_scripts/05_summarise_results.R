@@ -65,8 +65,8 @@ for(yr in 2011:2023) {
   bio_df <- read_rds(here('analysis/data/derived_data',
                           'Bio_Data_2011_2023.rds')) |>
     filter(spawn_year == yr) |>
-    rename(tag_code = pit_tag,
-           age = age_scales,
+    rename(tag_code = pit_tag) #|>
+    rename(age = age_scales,
            fork_length = length)
 
 

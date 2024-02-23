@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: compare PTAGIS MRR biological data to older data compiled across multiple years
 # Created: 12/20/2023
-# Last Modified: 12/20/2023
+# Last Modified: 1/22/2024
 # Notes:
 
 #-----------------------------------------------------------------
@@ -53,13 +53,13 @@ old_bio <-
          ad_clip_old = ad_clip,
          cwt_old = cwt,
          age_scales = age,
-         length_old = fork_length,
+         fork_length_old = fork_length,
          origin_old = origin) |>
   mutate(across(sex_old,
                 ~ recode(.,
                          "F" = "Female",
                          "M" = "Male")),
-         across(length_old,
+         across(fork_length_old,
                 ~ if_else(. < 100,
                           . * 10,
                           .))) |>
@@ -79,6 +79,53 @@ old_bio <-
   arrange(spawn_year,
           pit_tag,
           event_date)
+
+
+#-----------------------------------------------------------------
+# read in data from file that comes from WDFW database
+wdfw_db <-
+  read_excel(here("analysis/data/raw_data/WDFW",
+                  "UCM&E_STHD_PRD_RunYears_2010-2018.xlsx")) |>
+  clean_names() |>
+  mutate(spawn_year = year(survey_date) + 1) |>
+  rename(pit_tag = primary_tag,
+         second_pit_tag = secondary_tag,
+         event_date = survey_date,
+         sex = sex_final,
+         origin = origin_final) |>
+  filter(pit_tag != "-") |>
+  mutate(across(fork_length,
+                ~ if_else(. < 100,
+                          . * 10,
+                          .)),
+         cwt = if_else(is.na(cwt_sn) & is.na(cwt_do) & is.na(cwt_ad),
+                       F, T),
+         across(ad_clip,
+                ~ if_else(!is.na(.),
+                          T, F)),
+         species_run_rear_type = paste0(recode(species_final,
+                                               "ST" = "3"),
+                                        recode(run_final,
+                                               "SU" = "2"),
+                                        origin),
+         scale_id = paste0(str_pad(scale_card,
+                                   3,
+                                   side = "left",
+                                   pad = "0"),
+                           "-",
+                           str_pad(scale_cell,
+                                   2,
+                                   side = "left",
+                                   pad = "0")),
+         across(sex,
+                ~ recode(.,
+                         "M" = "Male",
+                         "F" = "Female")),
+         across(age_scales,
+                ~ str_replace(., "^r", "R"))) |>
+  arrange(spawn_year,
+          event_date,
+          pit_tag)
 
 #-----------------------------------------------------------------
 # uses a complete tag history of marks/recaptures at PRD or PRDLD1
@@ -110,14 +157,16 @@ sthd_tags <- read_csv(here("analysis/data/raw_data",
 # remove tags that are spawning in a future year
 sthd_tags <-
   sthd_tags |>
-  filter(spawn_year <= year(today()))
+  filter(spawn_year < year(today()))
 
 # pull out MRR data about all steelhead tags
-bio_df <-
+tagging_df <-
   sthd_tags |>
   select(spawn_year,
          event_file_name) |>
   distinct() |>
+  # filter out one tagging file that is not a WDFW project
+  filter(event_file_name != "CLD14105.WA1") |>
   arrange(spawn_year,
           event_file_name) |>
   # slice(1:6) |>
@@ -176,11 +225,16 @@ bio_df <-
                        T, F),
          ad_clip = case_when(str_detect(conditional_comments, "AD") ~ T,
                              str_detect(conditional_comments, "AI") ~ F,
-                             .default = NA))
+                             .default = NA)) |>
+  # correct any lengths that were mistakenly entered as cm, convert to mm
+  mutate(across(length,
+                ~ if_else(. < 100,
+                          . * 10,
+                          .)))
 
 # some second PIT tags only appear in text comments
 second_tags <-
-  bio_df |>
+  tagging_df |>
   filter(str_detect(text_comments, coll("same as", ignore_case = T))) |>
   mutate(text_code = str_split(text_comments, coll("same as", ignore_case = T), simplify = T)[,2],
          across(text_code,
@@ -197,24 +251,92 @@ second_tags <-
                 ~ if_else(str_detect(text_code, "^3", negate = T),
                           paste0("3D9.", .),
                           .))) |>
+  filter(second_pit_tag != text_code) |>
   select(spawn_year,
          pit_tag,
          second_pit_tag,
          text_comments,
          text_code)
 
-bio_df <-
-  bio_df |>
-  left_join(second_tags |>
+second_tags
+# the two tags left were recorded incorrectly in the comments (neither of those codes exist in PTAGIS).
+# The second tag recorded in PTAGIS now is correct
+
+# fish with second tag in comments, is that recorded in WDFW database?
+second_tags |>
+  left_join(wdfw_db |>
               select(spawn_year,
                      pit_tag,
-                     text_code)) |>
-  mutate(across(second_pit_tag,
-                ~ if_else(is.na(.) & !is.na(text_code),
-                          text_code,
-                          .))) |>
-  select(-text_code)
+                     second_pit_tag_wdfw = second_pit_tag)) |>
+  filter(is.na(second_pit_tag_wdfw))
 
+
+
+# tagging_df <-
+#   tagging_df |>
+#   left_join(second_tags |>
+#               select(spawn_year,
+#                      pit_tag,
+#                      text_code)) |>
+#   mutate(across(second_pit_tag,
+#                 ~ if_else(is.na(.) & !is.na(text_code),
+#                           text_code,
+#                           .))) |>
+#   select(-text_code)
+
+# pull out certain columns to use going forward
+bio_df <-
+  tagging_df |>
+  mutate(origin = str_extract(species_run_rear_type, "[:alpha:]$")) |>
+  select(spawn_year,
+         event_file_name,
+         pit_tag,
+         second_pit_tag,
+         event_date,
+         event_type,
+         species_run_rear_type,
+         origin,
+         sex,
+         cwt,
+         ad_clip,
+         fork_length = length,
+         poh,
+         conditional_comments,
+         text_comments,
+         release_date,
+         scale_id)
+
+names(wdfw_db)[!names(wdfw_db) %in% names(bio_df)]
+names(bio_df)[!names(bio_df) %in% names(wdfw_db)]
+
+intersect(names(wdfw_db), names(bio_df))
+
+bio_df |>
+  select(spawn_year,
+         event_file_name,
+         pit_tag,
+         event_type,
+         event_date,
+         release_date) |>
+  mutate(across(ends_with("date"),
+                ~ floor_date(., unit = "days"))) |>
+  left_join(sthd_tags |>
+              select(event_file_name,
+                     pit_tag = tag_code,
+                     event_type = event_type_name,
+                     event_date_mmddyyyy,
+                     event_release_date_mmddyyyy)) |>
+  arrange(spawn_year,
+          event_file_name,
+          pit_tag,
+          event_date) |>
+  filter(event_date != event_date_mmddyyyy |
+           release_date != event_release_date_mmddyyyy) #|>
+  group_by(spawn_year) |>
+  summarize(n_records = n_distinct(event_file_name))
+
+
+#------------------------------------------------------------
 # any tags appear more than once with different SRRs?
 srr_comp <-
   bio_df |>
@@ -231,6 +353,9 @@ srr_comp <-
          event_type,
          conditional_comments,
          SRR = species_run_rear_type)
+
+srr_comp
+
 
 #-----------------------------------------------------------------
 # read in recent age and final origin data from scales
@@ -407,6 +532,16 @@ write_xlsx(age_file,
            paste("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/inputs/Bio Data/PIT Tag PRD Scale Ages Spawn Years", min(old_age_df$spawn_year), "to present.xlsx"))
 
 
+age_df <-
+  age_file |>
+  map_df(.f = identity,
+         .id = "group") |>
+  rename(pit_tag = primary_pit_tag) |>
+  select(-group)
+
+
+
+
 #-----------------------------------------------------------------
 # primary PTAGIS file name for each tag
 ptagis_file_df <-
@@ -425,239 +560,620 @@ ptagis_file_df <-
 
 bio_comp <-
   bio_df |>
+  filter(spawn_year %in% unique(wdfw_db$spawn_year)) |>
+  mutate(origin = str_extract(species_run_rear_type, "[:alpha:]")) |>
   select(spawn_year,
          pit_tag,
          event_date,
+         release_date,
          event_type,
          SRR = species_run_rear_type,
+         origin,
          sex,
-         length,
+         fork_length,
          cwt,
          ad_clip,
          event_file_name,
          conditional_comments) |>
-  left_join(ptagis_file_df) |>
-  filter(event_file_name == ptagis_file_name) |>
-  arrange(pit_tag,
-          event_date)
+  # left_join(ptagis_file_df,
+  #           by = join_by(spawn_year, pit_tag)) |>
+  # filter(event_file_name == ptagis_file_name) |>
+  arrange(event_date,
+          pit_tag) |>
+  mutate(across(event_date,
+                ~ floor_date(., unit = "days")))
 
+# add age data
 bio_comp <-
   bio_comp |>
-  unite(sy_tag,
-        spawn_year,
-        pit_tag,
-        remove = F) |>
-  # filter(sy_tag %in% sy_tag[duplicated(sy_tag)]) |>
-  group_by(sy_tag) |>
-  slice(1) |>
+  left_join(age_df |>
+              select(spawn_year,
+                     pit_tag,
+                     age_scales)) |>
+  # fix a few typo things in the ages
+  mutate(across(age_scales,
+                ~ recode(.,
+                         "R" = "R.0",
+                         "R." = "R.0")),
+         across(age_scales,
+                ~ str_remove(., "^w")))
+
+
+
+# # keep first tag / spawn year combination
+# bio_comp <-
+#   bio_comp |>
+#   unite(sy_tag,
+#         spawn_year,
+#         pit_tag,
+#         remove = F) |>
+#   # filter(sy_tag %in% sy_tag[duplicated(sy_tag)]) |>
+#   group_by(sy_tag) |>
+#   slice(1) |>
+#   ungroup() |>
+#   select(-sy_tag)
+
+
+
+# # how many tags are missing fork_lengths in PTAGIS?
+# # Any of those have fork_lengths in older data?
+# length_comp <-
+#   bio_comp |>
+#   filter(is.na(fork_length)) |>
+#   select(spawn_year,
+#          event_date,
+#          event_type,
+#          pit_tag,
+#          SRR,
+#          # second_pit_tag,
+#          fork_length,
+#          event_file_name) |>
+#   distinct() |>
+#   left_join(old_bio |>
+#               select(spawn_year,
+#                      event_date,
+#                      pit_tag,
+#                      fork_length_old) |>
+#               distinct(),
+#             by = join_by(spawn_year,
+#                          event_date,
+#                          pit_tag)) |>
+#   left_join(wdfw_db |>
+#               select(spawn_year,
+#                      event_date,
+#                      pit_tag,
+#                      fork_length_wdfw = fork_length) |>
+#               distinct(),
+#             by = join_by(spawn_year,
+#                          event_date,
+#                          pit_tag)) |>
+#   mutate(missing_fork_length = if_else(is.na(fork_length_wdfw), T, F))
+#
+# length_comp |>
+#   tabyl(spawn_year, missing_fork_length) |>
+#   adorn_totals("both")
+#
+# length_comp |>
+#   filter(missing_fork_length) |>
+#   select(spawn_year,
+#          pit_tag) |>
+#   distinct() |>
+#   left_join(bio_comp |>
+#               select(spawn_year,
+#                      pit_tag,
+#                      event_date,
+#                      fork_length)) |>
+#   group_by(spawn_year,
+#            pit_tag) |>
+#   mutate(has_fl = if_else(sum(!is.na(fork_length)) > 0, T, F)) |>
+#   filter(!has_fl)
+#
+# # how many tags are missing sex in PTAGIS?
+# # Any of those have sex in older data?
+# sex_comp <-
+#   bio_comp |>
+#   filter(is.na(sex)) |>
+#   select(spawn_year,
+#          event_date,
+#          pit_tag,
+#          SRR,
+#          conditional_comments,
+#          sex,
+#          event_file_name) |>
+#   distinct() |>
+#   left_join(old_bio |>
+#               select(spawn_year,
+#                      event_date,
+#                      pit_tag,
+#                      sex_old) |>
+#               distinct()) |>
+#   left_join(wdfw_db |>
+#               select(spawn_year,
+#                      event_date,
+#                      pit_tag,
+#                      sex_wdfw = sex) |>
+#               distinct()) |>
+#   mutate(missing_sex = if_else(is.na(sex_wdfw), T, F))
+#
+# sex_comp |>
+#   tabyl(spawn_year, missing_sex) |>
+#   adorn_totals("both")
+#
+# # how many tags are missing CWT in PTAGIS? None
+# bio_comp |>
+#   filter(is.na(cwt))
+#
+# # how many tags are missing ad-clip status in PTAGIS?
+# # Any of those have ad-clip status in older data?
+# ad_clip_comp <-
+#   bio_comp |>
+#   filter(is.na(ad_clip)) |>
+#   select(spawn_year,
+#          pit_tag,
+#          SRR,
+#          conditional_comments,
+#          ad_clip,
+#          event_file_name) |>
+#   distinct() |>
+#   left_join(old_bio |>
+#               select(spawn_year,
+#                      pit_tag,
+#                      ad_clip_old) |>
+#               distinct(),
+#             relationship = "many-to-many") |>
+#   left_join(wdfw_db |>
+#               select(spawn_year,
+#                      pit_tag,
+#                      ad_clip_wdfw = ad_clip) |>
+#               distinct()) |>
+#   mutate(missing_ad_clip_data = if_else(is.na(ad_clip_wdfw), T, F)) |>
+#   arrange(pit_tag,
+#           spawn_year)
+#
+# ad_clip_comp |>
+#   tabyl(spawn_year, missing_ad_clip_data) |>
+#   adorn_totals("both")
+
+#-----------------------------------------------------------------
+# missing data in PTAGIS
+checkMissing <- function(var) {
+  if(! var %in% names(bio_df)) {
+    warning(paste(var, "not in columns of bio_df.\n"))
+    stop()
+  }
+  bio_df |>
+    filter(is.na(.data[[var]])) |>
+    select(spawn_year, pit_tag) |>
+    distinct() |>
+    left_join(bio_df |>
+                filter(!is.na(.data[[var]])),
+              by = join_by(spawn_year, pit_tag)) |>
+    filter(is.na(event_date)) |>
+    select(spawn_year, pit_tag) |>
+    distinct() |>
+    left_join(bio_df |>
+                select(spawn_year,
+                       pit_tag,
+                       event_file_name,
+                       event_date,
+                       release_date,
+                       conditional_comments,
+                       {{ var }}),
+              by = join_by(spawn_year, pit_tag)) |>
+    left_join(wdfw_db |>
+                select(spawn_year,
+                       pit_tag,
+                       {{ var }}) |>
+                rename(wdfw_value = {{ var }}),
+              by = join_by(spawn_year, pit_tag))
+}
+
+na_origin = checkMissing("origin")
+na_srr = checkMissing("species_run_rear_type")
+na_length = checkMissing("fork_length")
+na_sex = checkMissing("sex")
+na_ad_clip = checkMissing("ad_clip")
+na_cwt = checkMissing("cwt")
+# na_age = checkMissing("age_scales")
+
+#-----------------------------------------------------------------
+# any missing tags from particular spawn years?
+miss_tags <-
+  bio_comp |>
+  select(spawn_year,
+         # event_file_name,
+         pit_tag) |>
+  distinct() |>
+  mutate(record_ptagis = T) |>
+  full_join(wdfw_db |>
+              select(spawn_year,
+                     pit_tag) |>
+              distinct() |>
+              mutate(record_wdfw = T)) |>
+  mutate(across(starts_with("record_"),
+                ~ replace_na(., F))) |>
+  filter(!record_ptagis |
+           !record_wdfw) |>
+  mutate(missing_source = case_when(record_ptagis ~ "WDFW",
+                                    record_wdfw ~ "PTAGIS",
+                                    .default = NA_character_))
+
+miss_tags |>
+  tabyl(spawn_year,
+        missing_source) |>
+  adorn_totals("both")
+
+
+
+#-----------------------------------------------------------------
+# compare new and old values for some fields
+
+# dates
+date_comp <-
+  bio_comp |>
+  filter(spawn_year %in% unique(wdfw_db$spawn_year)) |>
+  select(spawn_year,
+         event_file_name,
+         event_date,
+         release_date,
+         event_type,
+         pit_tag) |>
+  distinct() |>
+  mutate(across(ends_with("date"),
+                ~ floor_date(., unit = "days"))) |>
+  mutate(record_ptagis = T) |>
+  pivot_longer(cols = ends_with("date"),
+               names_to = "type",
+               values_to = "date") |>
+  mutate(across(type,
+                ~ str_remove(., "_date$"))) |>
+  nest(ptagis_dates = c(type, date)) |>
+  full_join(wdfw_db |>
+              select(spawn_year,
+                     event_date,
+                     pit_tag,
+                     event_date) |>
+              distinct() |>
+              mutate(record_wdfw = T) |>
+              pivot_longer(cols = ends_with("date"),
+                           names_to = "type",
+                           values_to = "date") |>
+              mutate(across(type,
+                            ~ str_remove(., "_date$"))) |>
+              nest(wdfw_dates = c(type, date))) |>
+  left_join(old_bio |>
+              select(spawn_year,
+                     event_date,
+                     pit_tag,
+                     event_date) |>
+              distinct() |>
+              mutate(record_old = T) |>
+              pivot_longer(cols = ends_with("date"),
+                           names_to = "type",
+                           values_to = "date") |>
+              mutate(across(type,
+                            ~ str_remove(., "_date$"))) |>
+              nest(old_dates = c(type, date))) |>
+  mutate(across(starts_with("record_"),
+                ~ replace_na(., F)))
+
+date_comp |>
+  anti_join(miss_tags |>
+              select(spawn_year,
+                     pit_tag)) |>
+  tabyl(record_ptagis,
+        record_wdfw)
+
+
+
+
+mismatch_dates <-
+  date_comp |>
+  filter(record_wdfw,
+         record_ptagis) |>
+  mutate(shared_dates = map2_lgl(ptagis_dates,
+                                 wdfw_dates,
+                                 .f = function(x, y) {
+                                   if_else(sum(x$date %in% y$date) > 0 |
+                                             sum(y$date %in% x$date) > 0,
+                                           T, F)
+                                 })) |>
+  filter(! shared_dates)
+
+mismatch_dates |>
+  tabyl(event_file_name,
+        spawn_year)
+
+mismatch_dates |>
+  rename(ptagis = ptagis_dates,
+         wdfw = wdfw_dates,
+         old = old_dates) |>
+  select(-starts_with("record"),
+         -shared_dates) |>
+  slice(50) |>
+  unnest(c(ptagis, wdfw, old),
+         names_sep = "_") |>
+  as.data.frame()
+
+date_issues <-
+  mismatch_dates |>
+  rename(ptagis = ptagis_dates,
+         wdfw = wdfw_dates,
+         old = old_dates) |>
+  select(-starts_with("record"),
+         -shared_dates) |>
+  unnest(c(ptagis, wdfw, old),
+         names_sep = "_")
+
+date_issues |>
+  group_by(event_file_name) |>
+  mutate(n_events = sum(ptagis_type == "event"),
+         n_event_dates = n_distinct(ptagis_date[ptagis_type == "event"])) |>
   ungroup() |>
-  select(-sy_tag)
+  filter(!(n_event_dates == 1 & ptagis_type == "event")) |>
+  tabyl(ptagis_type)
 
 
-# how many tags are missing lengths in PTAGIS?
-# Any of those have lengths in older data?
+# character type fields
+chr_comp <-
+  bio_comp |>
+  select(spawn_year,
+         # event_file_name,
+         # event_type,
+         pit_tag,
+         SRR,
+         origin,
+         sex,
+         age_scales) |>
+  distinct() |>
+  mutate(source = "ptagis") |>
+  pivot_longer(cols = -c(spawn_year:pit_tag,
+                         source),
+               names_to = "field",
+               values_to = "value") |>
+  bind_rows(wdfw_db |>
+              select(spawn_year,
+                     pit_tag,
+                     SRR = species_run_rear_type,
+                     origin,
+                     sex,
+                     age_scales) |>
+              distinct() |>
+              mutate(source = "wdfw") |>
+              pivot_longer(cols = -c(spawn_year:pit_tag,
+                                     source),
+                           names_to = "field",
+                           values_to = "value")) |>
+  pivot_wider(names_from = source,
+              values_from = value) |>
+  unnest(c(ptagis, wdfw)) |>
+  group_by(spawn_year,
+           pit_tag,
+           field) |>
+  mutate(n_records = n(),
+         n_agree = sum(ptagis == wdfw),
+         n_disagree = sum(ptagis != wdfw)) |>
+  ungroup() |>
+  filter(n_disagree > 0) #|>
+  # left_join(old_bio |>
+  #             select(spawn_year,
+  #                    pit_tag,
+  #                    origin = origin_old,
+  #                    sex = sex_old,
+  #                    age_scales) |>
+  #             distinct() |>
+  #             pivot_longer(cols = -c(spawn_year:pit_tag),
+  #                          names_to = "type",
+  #                          values_to = "old"))
+
+
+chr_comp |>
+  select(-starts_with("n_"))
+
+# logical type fields
+lgl_comp <-
+  bio_comp |>
+  filter(spawn_year %in% unique(wdfw_db$spawn_year)) |>
+  select(spawn_year,
+         # event_file_name,
+         # event_type,
+         pit_tag,
+         cwt,
+         ad_clip) |>
+  distinct() |>
+  mutate(source = "ptagis") |>
+  pivot_longer(cols = -c(spawn_year:pit_tag,
+                         source),
+               names_to = "field",
+               values_to = "value") |>
+  bind_rows(wdfw_db |>
+              select(spawn_year,
+                     pit_tag,
+                     cwt,
+                     ad_clip) |>
+              distinct() |>
+              mutate(source = "wdfw") |>
+              pivot_longer(cols = -c(spawn_year:pit_tag,
+                                     source),
+                           names_to = "field",
+                           values_to = "value")) |>
+  pivot_wider(names_from = source,
+              values_from = value) |>
+  unnest(c(ptagis, wdfw)) |>
+  group_by(spawn_year,
+           pit_tag,
+           field) |>
+  mutate(n_records = n(),
+         n_agree = sum(ptagis == wdfw, na.rm = T),
+         n_disagree = sum(ptagis != wdfw, na.rm = T)) |>
+  ungroup() |>
+  filter(n_disagree > 0) |>
+  left_join(bio_comp |>
+              select(spawn_year,
+                     # event_file_name,
+                     # event_type,
+                     SRR,
+                     pit_tag) |>
+              distinct()) |>
+  relocate(SRR,
+           .after = pit_tag)
+# left_join(old_bio |>
+#             select(spawn_year,
+#                    pit_tag,
+#                    origin = origin_old,
+#                    sex = sex_old,
+#                    age_scales) |>
+#             distinct() |>
+#             pivot_longer(cols = -c(spawn_year:pit_tag),
+#                          names_to = "type",
+#                          values_to = "old"))
+
+lgl_comp |>
+  tabyl(ptagis,
+        wdfw,
+        field)
+
+lgl_comp |>
+  tabyl(spawn_year,
+        field) |>
+  adorn_totals("both")
+
+lgl_comp |>
+  filter(field == "ad_clip") |>
+  select(-starts_with("n_"))
+
+lgl_comp |>
+  filter(field == "cwt") |>
+  select(-starts_with("n_")) |>
+  tabyl(spawn_year)
+
+# length
 length_comp <-
   bio_comp |>
-  filter(is.na(length)) |>
+  filter(spawn_year %in% unique(wdfw_db$spawn_year)) |>
   select(spawn_year,
          pit_tag,
-         SRR,
-         # second_pit_tag,
-         length,
-         event_file_name) |>
+         fork_length) |>
   distinct() |>
-  left_join(old_bio |>
+  mutate(record_ptagis = T) |>
+  nest(ptagis = fork_length) |>
+  full_join(wdfw_db |>
               select(spawn_year,
                      pit_tag,
-                     length_old) |>
-              distinct(),
-            by = join_by(spawn_year, pit_tag)) |>
-  mutate(missing_length = if_else(is.na(length_old), T, F))
+                     fork_length) |>
+              distinct() |>
+              mutate(record_wdfw = T) |>
+              nest(wdfw= fork_length)) |>
+  mutate(across(starts_with("record_"),
+                ~ replace_na(., F)))
 
 length_comp |>
-  tabyl(spawn_year, missing_length) |>
-  adorn_totals("both")
+  tabyl(record_ptagis,
+        record_wdfw)
 
-# how many tags are missing sex in PTAGIS?
-# Any of those have sex in older data?
-sex_comp <-
-  bio_comp |>
-  filter(is.na(sex)) |>
+
+mismatch_length <-
+  length_comp |>
+  filter(record_ptagis,
+         record_wdfw) |>
+  mutate(shared_lengths = map2_lgl(ptagis,
+                                 wdfw,
+                                 .f = function(x, y) {
+                                   if_else(sum(x$fork_length %in% y$fork_length) > 0 |
+                                             sum(y$fork_length %in% x$fork_length) > 0,
+                                           T, F)
+                                 })) |>
+  unnest(c(ptagis,
+           wdfw),
+         names_sep = "_") |>
+  arrange(spawn_year,
+          pit_tag,
+          ptagis_fork_length) |>
+  filter(ptagis_fork_length != wdfw_fork_length)
+  # filter(! shared_lengths)
+
+
+length_comp |>
+  filter(!record_ptagis)
+
+
+alt_lengths <-
+  mismatch_length |>
   select(spawn_year,
-         pit_tag,
-         SRR,
-         conditional_comments,
-         sex,
-         event_file_name) |>
-  distinct() |>
-  left_join(old_bio |>
+         pit_tag) |>
+  left_join(bio_comp |>
               select(spawn_year,
+                     event_file_name,
+                     event_date,
+                     release_date,
                      pit_tag,
-                     sex_old) |>
-              distinct()) |>
-  mutate(missing_sex = if_else(is.na(sex_old), T, F))
-
-sex_comp |>
-  tabyl(spawn_year, missing_sex) |>
-  adorn_totals("both")
-
-# how many tags are missing CWT in PTAGIS? None
-bio_comp |>
-  filter(is.na(cwt))
-
-# how many tags are missing ad-clip status in PTAGIS?
-# Any of those have ad-clip status in older data?
-ad_clip_comp <-
-  bio_comp |>
-  filter(is.na(ad_clip)) |>
-  select(spawn_year,
-         pit_tag,
-         SRR,
-         conditional_comments,
-         ad_clip,
-         event_file_name) |>
-  distinct() |>
-  left_join(old_bio |>
+                     ptagis_fl = fork_length) |>
+              mutate(across(ends_with("date"),
+                            ~ floor_date(., unit = "days")))) |>
+  arrange(spawn_year,
+          pit_tag,
+          release_date) |>
+  group_by(spawn_year,
+           pit_tag) |>
+  mutate(rec_num = 1:n()) |>
+  ungroup() |>
+  pivot_wider(names_from = rec_num,
+              values_from = c(ptagis_fl,
+                              event_file_name,
+                              ends_with("date")),
+              names_glue = "{.value}_{rec_num}") |>
+  left_join(mismatch_length |>
               select(spawn_year,
-                     pit_tag,
-                     ad_clip_old) |>
-              distinct(),
-            relationship = "many-to-many") |>
-  mutate(missing_ad_clip = if_else(is.na(ad_clip_old), T, F)) |>
-  arrange(pit_tag,
-          spawn_year)
+                     pit_tag) |>
+              left_join(wdfw_db |>
+                          select(spawn_year,
+                                 wdfw_date = event_date,
+                                 pit_tag,
+                                 wdfw_fl = fork_length)) |>
+              arrange(spawn_year,
+                      pit_tag,
+                      wdfw_date) |>
+              group_by(spawn_year,
+                       pit_tag) |>
+              mutate(rec_num = 1:n()) |>
+              ungroup() |>
+              pivot_wider(names_from = rec_num,
+                          values_from = c(wdfw_fl,
+                                          wdfw_date),
+                          names_glue = "{.value}_{rec_num}")) |>
+  mutate(adjust_wdfw = if_else(ptagis_fl_1 == ptagis_fl_2 &
+                                 wdfw_fl_1 != wdfw_fl_2 |
+                                 (is.na(ptagis_fl_1) | is.na(ptagis_fl_2)),
+                               T, F),
+         adjust_ptagis = if_else(ptagis_fl_1 != ptagis_fl_2 &
+                                   wdfw_fl_1 == wdfw_fl_2,
+                                 T, F))
 
-ad_clip_comp |>
-  tabyl(spawn_year, missing_ad_clip) |>
-  adorn_totals("both")
+#-------------------------------------------------------
+# save results
+list(
+  NA_length = na_length,
+  NA_sex = na_sex,
+  NA_ad_clip = na_ad_clip,
+  missing_tags = miss_tags,
+  date_mismatch = date_issues,
+  sex_mismatch = chr_comp |>
+    select(-starts_with("n_")) |>
+    filter(field == "sex"),
+  origin_mismatch = chr_comp |>
+    select(-starts_with("n_")) |>
+    filter(field %in% c("origin",
+                        "SRR")),
+  ad_clip_mismatch = lgl_comp |>
+    filter(field == "ad_clip") |>
+    select(-ends_with("agree")),
+  cwt_mismatch = lgl_comp |>
+    filter(field == "cwt") |>
+    select(-ends_with("agree")),
+  length_mismatch = alt_lengths) |>
+  write_xlsx(here("outgoing/other/QAQC_PTAGIS_vs_WDFWdatabase.xlsx"))
 
-# compare new and old values for some fields
-comp_df <-
-  bio_comp |>
-  filter(spawn_year %in% unique(old_bio$spawn_year)) |>
-  select(spawn_year,
-         pit_tag,
-         conditional_comments,
-         SRR,
-         sex,
-         cwt,
-         ad_clip,
-         length) |>
-  distinct() |>
-  left_join(old_bio |>
-              select(spawn_year,
-                     pit_tag,
-                     # origin_old,
-                     sex_old,
-                     cwt_old,
-                     ad_clip_old,
-                     length_old) |>
-              distinct() |>
-              group_by(pit_tag) |>
-              slice(1) |>
-              ungroup())
-
-
-length_diff <-
-  comp_df |>
-  select(spawn_year:SRR,
-         contains("length")) |>
-         # contains("sex")) |>
-         # contains("cwt"),
-         # contains("ad_clip")) |>
-  pivot_longer(cols = -c(spawn_year:SRR),
-               names_to = "metric") |>
-  mutate(source = if_else(str_detect(metric, "_old"),
-                          "old",
-                          "new"),
-         across(metric,
-                ~ str_remove(., "_old"))) |>
-  pivot_wider(names_from = source,
-              values_from = value) |>
-  unnest(c(new, old)) |>
-  arrange(spawn_year,
-          pit_tag,
-          metric) |>
-  mutate(value_match = if_else(new == old, T, F)) |>
-  filter(!value_match)
-
-length_diff |>
-  # filter(is.na(value_match))
-  tabyl(spawn_year,
-        value_match,
-        metric) |>
-  adorn_totals("both")
-
-sex_diff <-
-  comp_df |>
-  select(spawn_year:SRR,
-         # contains("length")) |>
-         contains("sex")) |>
-  # contains("cwt"),
-  # contains("ad_clip")) |>
-  pivot_longer(cols = -c(spawn_year:SRR),
-               names_to = "metric") |>
-  mutate(source = if_else(str_detect(metric, "_old"),
-                          "old",
-                          "new"),
-         across(metric,
-                ~ str_remove(., "_old"))) |>
-  pivot_wider(names_from = source,
-              values_from = value) |>
-  unnest(c(new, old)) |>
-  arrange(spawn_year,
-          pit_tag,
-          metric) |>
-  mutate(value_match = if_else(new == old, T, F)) |>
-  filter(!value_match)
-
-sex_diff |>
-  # filter(is.na(value_match))
-  tabyl(spawn_year,
-        value_match,
-        metric) |>
-  adorn_totals("both")
-
-
-cwt_ad_clip_diff <-
-  comp_df |>
-  select(spawn_year:SRR,
-  contains("cwt"),
-  contains("ad_clip")) |>
-  pivot_longer(cols = -c(spawn_year:SRR),
-               names_to = "metric") |>
-  mutate(source = if_else(str_detect(metric, "_old"),
-                          "old",
-                          "new"),
-         across(metric,
-                ~ str_remove(., "_old"))) |>
-  pivot_wider(names_from = source,
-              values_from = value) |>
-  unnest(c(new, old)) |>
-  arrange(spawn_year,
-          pit_tag,
-          metric) |>
-  mutate(value_match = if_else(new == old, T, F)) |>
-  filter(!value_match) |>
-  arrange(spawn_year,
-          pit_tag,
-          metric)
-
-cwt_ad_clip_diff |>
-  # filter(is.na(value_match))
-  tabyl(spawn_year,
-        value_match,
-        metric) |>
-  adorn_totals("both")
-
-
-list(multiple_SRR = srr_comp,
-     miss_second_tags = second_tags,
-     miss_length = length_comp,
-     miss_sex = sex_comp,
-     miss_ad_clip = ad_clip_comp,
-     diff_length = length_diff,
-     diff_sex = sex_diff,
-     diff_cwt_ad_clip = cwt_ad_clip_diff) |>
-  write_xlsx(here("outgoing/other/QAQC_PTAGIS_vs_OldData.xlsx"))
-
+list("PTAGIS" = bio_df,
+     "WDFW" = wdfw_db,
+     "Old" = old_bio) |>
+  write_xlsx(here("outgoing/other/BioData_Comparison.xlsx"))

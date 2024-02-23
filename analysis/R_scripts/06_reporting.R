@@ -652,7 +652,7 @@ dabom_df <-
   mutate(dam_cnt_name = if_else(spawn_year %in% c(2011:2015, 2018),
                                 "PriestRapids",
                                 "RockIsland"))
-
+# focus only on max year
 dabom_df <-
   dabom_df |>
   filter(spawn_year == max_yr)
@@ -2052,6 +2052,6 @@ for(i in 1:length(previous_output)) {
 
 write_xlsx(x = save_list_new,
            path = paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/Estimates/",
-                         "UC_STHD_Model_Output_",
-                         format(today(), "%Y%m%d"),
+                         "UC_STHD_Model_Output",
+                         # "_", format(today(), "%Y%m%d"),
                          ".xlsx"))

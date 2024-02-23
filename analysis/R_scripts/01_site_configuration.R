@@ -35,7 +35,8 @@ library(here)
 root_site = "PRA"
 
 # build configuration table (requires internet connection)
-org_config = buildConfig()
+org_config = buildConfig(node_assign = "array",
+                         array_suffix = "UD")
 
 # customize some nodes based on DABOM framework
 configuration = org_config %>%
@@ -62,7 +63,7 @@ configuration = org_config %>%
   filter(!(site_code == 'WAN' & site_type == 'MRR'),
          !(site_code == 'TMF' & site_type == 'MRR'),
          !(site_code == 'PRO' & site_type == 'MRR')) %>%
-  mutate(node = if_else(site_code %in% c('RIA', 'RRF', 'WEA', 'PRV'),
+  mutate(node = if_else(site_code %in% c('RIA', 'RRF', 'WEA', 'PRV', 'PRH'),
                         site_code,
                         node)) %>%
   mutate(node = if_else(site_code == 'PRDLD1',
@@ -168,12 +169,12 @@ configuration = org_config %>%
          node = if_else(site_code == 'MSH' & antenna_id %in% c('01'),
                         'MSH_U',
                         node),
-         node = if_else(site_code == 'MSH' & antenna_id == '00',
-                        'METH_D',
-                        node),
-         node = if_else(site_code == 'METH',
-                        'METH_U',
-                        node),
+         # node = if_else(site_code == 'MSH' & antenna_id == '00',
+         #                'METH_D',
+         #                node),
+         # node = if_else(site_code == 'METH',
+         #                'METH_U',
+         #                node),
          node = if_else(site_code == 'LLC' & config_id == 100,
                         if_else(antenna_id == 'D3',
                                 'LLC_D',
@@ -191,11 +192,18 @@ configuration = org_config %>%
          # node = if_else(site_code == "OMF",
          #                "OBF",
          #                node),
-         node = if_else(site_code == 'ZSL',
-                        if_else(grepl('Weir 3', antenna_group, ignore.case = T),
-                                'ZSL_D',
-                                'ZSL_U'),
-                        node),
+         # ZSL has definitive up/down antennas in initial configurations, but it gets more complicated after that
+         node = case_when(site_code == "ZSL" &
+                            str_detect(antenna_group,
+                             "(?i)Weir 3") &
+                            config_id %in% c("100", "110") ~ "ZSL_D",
+                          site_code == "ZSL" &
+                            str_detect(antenna_group,
+                                       "(?i)Weir 2") &
+                            config_id %in% c("100", "110") ~ "ZSL_U",
+                          site_code == "ZSL" &
+                            !config_id %in% c("100", "110") ~ "ZSL",
+                          .default = node),
          node = if_else(site_code == 'SA1' & config_id == 110,
                         'SA1_D',
                         node),
@@ -216,12 +224,6 @@ configuration = org_config %>%
                         if_else(antenna_id %in% c('C3'),
                                 'BPC_D',
                                 'BPC_U'),
-                        node),
-         node = if_else(site_code == 'PRH' & antenna_id %in% c('F1', 'F2', 'F3', 'F4'),
-                        'PRH_D',
-                        node),
-         node = if_else((site_code == 'PRH' & antenna_id %in% c('F5', 'F6', '01', '02')) | site_code %in% c('DDM', 'DM', 'UM', 'UUM', 'UP'),
-                        'PRH_U',
                         node),
          node = if_else(site_code == 'PRO' & site_type == 'INT',
                         'PRO_D',
@@ -305,6 +307,9 @@ sites_sf = writeOldNetworks()$PriestRapids %>%
                          "BelowJD1" = "JDA")),
          path = str_replace(path, "BelowJD1", "JDA")) %>%
   rename(site_code = SiteID) %>%
+  # filter out site at the Methow Fish Hatchery, we're not going to use them
+  filter(!site_code %in% c("MSH",
+                           "METH")) |>
   # add a few sites in the Okanogan region
   # exclude CHJO because fish detected there have some strange detection histories
   bind_rows(
@@ -436,14 +441,14 @@ parent_child = sites_sf %>%
                                   c("JDA", 'PRO', "PRA"),
                                   c("JDA", 'TMF', "PRA"),
                                   c("JDA", 'PRV', "PRA"),
-                                  c(NA, "JDA", 'PRA'),
                                   c("RSH", 'PRH', 'PRA'),
+                                  c(NA, "JDA", 'PRA'),
                                   c("ICL", 'TUM', "LWE"),
-                                  c("LNF", 'ICM', "ICL"),
+                                  # c("LNF", 'ICM', "ICL"),
                                   c(NA, "LNF", "ICL"),
-                                  c("RIA", "WEA", 'RRF'),
-                                  c("RIA", "WEH", 'RRF'),
-                                  c("RIA", "ENL", "RRF"),
+                                  # c("RIA", "WEA", 'RRF'),
+                                  # c("RIA", "WEH", 'RRF'),
+                                  # c("RIA", "ENL", "RRF"),
                                   c("RIA", "EBO", "RRF"),
                                   c("EBO", "WEH", 'RRF'),
                                   c("EBO", "WEA", 'RRF'),
@@ -453,10 +458,11 @@ parent_child = sites_sf %>%
                                   c("WEH", "FST", 'WEA'),
                                   c("EHL", 'ENA', 'ENL'),
                                   c("EHL", 'MAD', 'ENL'),
-                                  c("METH", "MRW", "MRC"),
-                                  c("SCP", "METH", "MSH"),
-                                  c("SCP", 'MSH', 'MRC'),
-                                  c("SCP", "WINT", "MRC"),
+                                  c("SCP", "MRW", "MRC"),
+                                  # c("METH", "MRW", "MRC"),
+                                  # c("SCP", "METH", "MSH"),
+                                  # c("SCP", 'MSH', 'MRC'),
+                                  # c("SCP", "WINT", "MRC"),
                                   c("WHS", "OKC", "ZSL"),
                                   c("WHS", "ZSL", "OKL"),
                                   c("OMK", "OMF", "OBF"),
@@ -478,23 +484,16 @@ parent_child = sites_sf %>%
 parent_child %>%
   filter(child %in% child[duplicated(child)])
 
-parent_child %>%
-  filter(child %in% c("OMF",
-                      "OKM",
-                      "OKW",
-                      "SKA",
-                      "OKS",
-                      "OKP",
-                      "OMH",
-                      "ANR",
-                      "SAD") |
-           parent %in% c("OBF",
-                         "OKC",
-                         "OKM",
-                         "SKA",
-                         "OMF",
-                         "ANR",
-                         "SAD"))
+
+paths <- buildPaths(parent_child)
+
+test_sites <- paths |>
+  filter(str_detect(path, "LWE")) |>
+  pull(end_loc)
+parent_child |>
+  filter(parent %in% test_sites |
+           child %in% test_sites) |>
+  plotNodes()
 
 # add RKMs from configuration file (since we had to fix at least one from PTAGIS)
 parent_child %<>%
@@ -510,6 +509,16 @@ parent_child %<>%
             by = "child") %>%
   distinct()
 
+# reduce configuration file to those sites included in parent-child table
+configuration <-
+  configuration |>
+  mutate(node_site = str_remove(node, "_U$"),
+         across(node_site,
+                ~ str_remove(., "_D"))) |>
+  filter(node_site %in% union(parent_child$parent,
+                              parent_child$child))
+
+
 
 sites_df = writeOldNetworks()$PriestRapids %>%
   mutate(across(c(SiteID, Step3),
@@ -519,14 +528,14 @@ sites_df = writeOldNetworks()$PriestRapids %>%
   rename(site_code = SiteID)
 
 ques_locs = sites_df %>%
-  # filter(grepl('Wenatchee', path)) %>%
+  filter(grepl('Wenatchee', path)) %>%
   # filter(grepl("Entiat", path)) %>%
   # filter(grepl('Methow', path)) %>%
   # filter(grepl("Okanogan", path)) %>%
-  filter(nchar(Step3) == 3,
-         nchar(Step4) < 6,
-         nchar(Step5) < 6,
-         Step2 != "BelowPriest") %>%
+  # filter(nchar(Step3) == 3,
+  #        nchar(Step4) < 6,
+  #        nchar(Step5) < 6,
+  #        Step2 != "BelowPriest") %>%
   pull(site_code)
 
 parent_child %>%
@@ -552,7 +561,7 @@ uc_sites <- configuration %>%
   select(node) %>%
   distinct() %>%
   left_join(configuration) %>%
-  select(site_code, node, site_name, site_type) %>%
+  select(site_code, node, site_name, site_type, rkm) %>%
   distinct() %>%
   arrange(node, site_code)
 
