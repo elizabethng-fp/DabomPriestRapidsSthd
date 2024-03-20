@@ -167,7 +167,7 @@ tagging_df <-
   filter(pit_tag %in% sthd_tags$tag_code |
            second_pit_tag %in% sthd_tags$tag_code |
            pit_tag %in% extra_tags$pit_tag[extra_tags$event_type != "Recovery"]) |>
-  # put a few filter on
+  # put a few filters on
   filter(life_stage == "Adult",                                # filter for adults
          str_detect(species_run_rear_type, "^3"),              # filter for O. mykiss
          str_detect(species_run_rear_type, "^30", negate = T), # ignore tags identified as rainbow trout
@@ -176,35 +176,35 @@ tagging_df <-
 
 
 #------------------------------------------------
-# some second PIT tags only appear in text comments
-second_tags <-
-  tagging_df |>
-  filter(str_detect(text_comments, coll("same as", ignore_case = T))) |>
-  mutate(text_code = str_split(text_comments, coll("same as", ignore_case = T), simplify = T)[,2],
-         across(text_code,
-                ~ str_remove(., "\\#")),
-         across(text_code,
-                ~ str_remove(., "SD$")),
-         across(text_code,
-                str_squish),
-         across(text_code,
-                ~ str_remove(., " ")),
-         across(text_code,
-                str_to_upper),
-         across(text_code,
-                ~ if_else(str_detect(text_code, "^3", negate = T),
-                          paste0("3D9.", .),
-                          .))) |>
-  filter(second_pit_tag != text_code) |>
-  select(spawn_year,
-         pit_tag,
-         second_pit_tag,
-         text_comments,
-         text_code)
-
-second_tags
-# the two tags left were recorded incorrectly in the comments (neither of those codes exist in PTAGIS).
-# The second tag recorded in PTAGIS now is correct
+# # some second PIT tags only appear in text comments
+# second_tags <-
+#   tagging_df |>
+#   filter(str_detect(text_comments, coll("same as", ignore_case = T))) |>
+#   mutate(text_code = str_split(text_comments, coll("same as", ignore_case = T), simplify = T)[,2],
+#          across(text_code,
+#                 ~ str_remove(., "\\#")),
+#          across(text_code,
+#                 ~ str_remove(., "SD$")),
+#          across(text_code,
+#                 str_squish),
+#          across(text_code,
+#                 ~ str_remove(., " ")),
+#          across(text_code,
+#                 str_to_upper),
+#          across(text_code,
+#                 ~ if_else(str_detect(text_code, "^3", negate = T),
+#                           paste0("3D9.", .),
+#                           .))) |>
+#   filter(second_pit_tag != text_code) |>
+#   select(spawn_year,
+#          pit_tag,
+#          second_pit_tag,
+#          text_comments,
+#          text_code)
+#
+# second_tags
+# # the two tags left were recorded incorrectly in the comments (neither of those codes exist in PTAGIS).
+# # The second tag recorded in PTAGIS now is correct
 
 
 # pull out certain columns to use going forward
@@ -223,6 +223,7 @@ bio_df <-
          pit_tag,
          second_pit_tag,
          event_date,
+         release_date,
          event_type,
          species_run_rear_type,
          origin,
@@ -233,7 +234,6 @@ bio_df <-
          poh,
          conditional_comments,
          text_comments,
-         release_date,
          scale_id) |>
   mutate(across(release_date,
                 ~ if_else(is.na(.),
@@ -324,6 +324,7 @@ tabyl(bio_df,
       species_run_rear_type) |>
   adorn_totals(where = "both")
 
+# any tags left from initial PTAGIS query that aren't in the bio data now?
 sthd_tags |>
   anti_join(bio_df |>
               select(contains("pit")) |>
@@ -337,8 +338,10 @@ sthd_tags |>
   select(spawn_year,
          pit_tag,
          species_run_rear_type,
-         everything())
+         everything()) |>
   as.data.frame()
+# only one left is a rainbow trout
+
 
 #-----------------------------------------------------------------
 # add age and final origin data from scales
@@ -433,7 +436,7 @@ scale_age_df <-
              is.na(age))) |>
            # age %in% c("UNREADABLE",
            #            "NS"))) |>
-  # for one tag with multiple ages, choose W1.2 (Mike Hughes said so)
+  # for one tag with multiple ages, choose R.2 or W1.2 (Mike Hughes said so)
   filter(!(primary_pit_tag == "3DD.003D552F68" &
              age == "R.2")) |>
   select(-sy_pit)
@@ -490,10 +493,10 @@ bio_df |>
          contains("comments"),
          age) #|>
 # write_csv(here("outgoing/other/missing_scale_data.csv"))
-mutate(event_month = month(event_date,
-                           label = T)) |>
-  tabyl(spawn_year, event_month) |>
-  adorn_totals(where = "both")
+# mutate(event_month = month(event_date,
+#                            label = T)) |>
+#   tabyl(spawn_year, event_month) |>
+#   adorn_totals(where = "both")
 
 # what age data is associated with a tag not in our sample?
 scale_age_df |>
@@ -501,10 +504,12 @@ scale_age_df |>
   select(spawn_year,
          primary_pit_tag,
          age) |>
+  # tabyl(spawn_year)
   left_join(bio_df |>
                select(spawn_year,
                       primary_pit_tag = pit_tag,
-                      second_pit_tag))
+                      second_pit_tag,
+                      species_run_rear_type))
 
 scale_age_df |>
   filter(primary_pit_tag == "3D9.1BF26E6B42")
@@ -530,6 +535,7 @@ bio_age_df <-
                        age)) |>
   select(-age_v2)
 
+# any tags with missing ages?
 bio_age_df |>
   filter(is.na(age)) |>
   select(spawn_year,
@@ -634,11 +640,12 @@ bio_final_df |>
                       pit_tag = primary_pit_tag,
                       age))
 
-# any tags missing ages that shouldn't be?
+# any tags missing lengths that shouldn't be?
 bio_final_df |>
   filter(is.na(length))
 
 summary(bio_final_df)
+colSums(is.na(bio_final_df))
 
 #-----------------------------------------------------------------
 # save as Excel file
