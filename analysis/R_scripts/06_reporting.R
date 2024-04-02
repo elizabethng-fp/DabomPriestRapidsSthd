@@ -39,6 +39,8 @@ makeTableNms = function(df) {
         str_replace("Phos", "pHOS") |>
         str_replace("Lowerci", "LCI") |>
         str_replace("Upperci", "UCI") |>
+        str_replace("Upper Ci", "UCI") |>
+        str_replace("Lower Ci", "LCI") |>
         str_replace("Lci", "LCI") |>
         str_replace("Uci", "UCI") |>
         str_replace("Cwt$", "CWT")
@@ -828,15 +830,15 @@ pop_escp <-
                                                             "Okanogan",
                                                             "Below Priest"))) %>%
                            group_by(chain, iter, origin, param) %>%
-                           summarize(across(escp,
+                           summarize(across(abund,
                                             sum),
                                      .groups = "drop") %>%
                            group_by(origin,
                                     population = param) %>%
-                           summarise(est = median(escp),
-                                     se = sd(escp),
-                                     lci = coda::HPDinterval(coda::as.mcmc(escp))[,1],
-                                     uci = coda::HPDinterval(coda::as.mcmc(escp))[,2],
+                           summarise(est = median(abund),
+                                     se = sd(abund),
+                                     lci = coda::HPDinterval(coda::as.mcmc(abund))[,1],
+                                     uci = coda::HPDinterval(coda::as.mcmc(abund))[,2],
                                      .groups = 'drop') %>%
                            mutate(across(c(est, se, lci),
                                          ~ if_else(. < 0, 0, .))) %>%
@@ -890,10 +892,10 @@ all_escp <-
             skew,
             kurtosis)) %>%
   mutate(across(c(mean:mode,
-                  ends_with("CI")),
+                  ends_with("ci")),
                 janitor::round_half_up),
          across(c(mean:mode,
-                  ends_with("CI")),
+                  ends_with("ci")),
                 as.integer)) %>%
   rename(estimate = median,
          se = sd) %>%
@@ -932,7 +934,7 @@ all_escp <-
   # make some 0s into NAs
   mutate(
     across(
-      c(estimate:upperCI),
+      c(estimate:upper_ci),
       ~ if_else(n_tags == 0 & estimate == 0, NA_real_, .)
     )
   ) |>
@@ -1433,7 +1435,7 @@ mark_post = escape_post2 |>
   mutate(prop = if_else(value == 0,
                         0,
                         prop)) |>
-  mutate(n_fish = escp * prop)
+  mutate(n_fish = abund * prop)
 
 mark_grp_df <-
   mark_post |>
@@ -2010,7 +2012,8 @@ yr = 2023
 library(readxl)
 output_path <- paste0("T:/DFW-Team FP Upper Columbia Escapement - General/",
                       "UC_Sthd/Estimates/",
-                      "UC_STHD_Model_Output.xlsx")
+                      # "UC_STHD_Model_Output.xlsx")
+                      "UC_STHD_Model_Output_20240108.xlsx")
 
 tab_nms <- excel_sheets(output_path)
 
@@ -2025,7 +2028,8 @@ previous_output <- as.list(tab_nms) |>
                  ends_with("SE"),
                  ends_with("CV")),
                as.numeric))
-  })
+  },
+  .progress = T)
 
 lst_one_yr <- save_list |>
   map(.f = function(x) {
@@ -2046,12 +2050,9 @@ for(i in 1:length(previous_output)) {
     arrange(`Spawn Year`)
 }
 
-# write_xlsx(x = save_list_new,
-#            path = paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/Estimates/",
-#                          "UC_STHD_Model_Output.xlsx"))
 
 write_xlsx(x = save_list_new,
-           path = paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/Estimates/",
+           path = paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/estimates/",
                          "UC_STHD_Model_Output",
                          # "_", format(today(), "%Y%m%d"),
                          ".xlsx"))

@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: prep and run DABOM
 # Created: 4/1/20
-# Last Modified: 11/22/23
+# Last Modified: 4/2/24
 # Notes:
 
 #-----------------------------------------------------------------
@@ -24,7 +24,7 @@ load(here('analysis/data/derived_data/site_config.rda'))
 # set year
 yr = 2023
 
-# for(yr in 2011:2022) {
+for(yr in 2011:2022) {
   cat(paste("Working on", yr, "\n\n"))
 
   # # load and filter biological data
@@ -96,31 +96,57 @@ yr = 2023
                                time_varying = F)
 
 
-  # run the model
-  jags = jags.model(mod_path,
-                    data = jags_data,
-                    inits = init_fnc,
-                    # n.chains = 1,
-                    # n.adapt = 5)
-                    n.chains = 4,
-                    n.adapt = 10000)
+  # # run the model
+  # jags = jags.model(mod_path,
+  #                   data = jags_data,
+  #                   inits = init_fnc,
+  #                   # n.chains = 1,
+  #                   # n.adapt = 5)
+  #                   n.chains = 4,
+  #                   n.adapt = 10000)
+  #
+  #
+  # #--------------------------------------
+  # # take MCMC samples from the posteriors
+  # dabom_mod = coda.samples(jags,
+  #                          jags_params,
+  #                          # n.iter = 10)
+  #                          n.iter = 5000,
+  #                          thin = 10)
+  #
 
+  #-------------------------------------
+  # use jagsUI to run in parallel
+  library(jagsUI)
 
-  #--------------------------------------
-  # take MCMC samples from the posteriors
-  dabom_mod = coda.samples(jags,
-                           jags_params,
-                           # n.iter = 10)
-                           n.iter = 5000,
-                           thin = 10)
+  set.seed(123)
+  jags_mod <-
+    jags(data = jags_data,
+         inits = init_fnc,
+         parameters.to.save = jags_params,
+         model.file = mod_path,
+         n.chains = 4,
+         n.adapt = 1000,
+         n.iter = 10000,
+         n.burnin = 5000,
+         n.thin = 10,
+         parallel = T,
+         n.cores = 4,
+         DIC = F,
+         verbose = T)
 
+  dabom_mod <-
+    jags_mod$samples
+  rm(jags_mod)
 
+  #-------------------------------------
+  # save some objects
   save(dabom_mod, jags_data, filter_obs, bio_df,
        file = here("analysis/data/derived_data/model_fits",
                    paste0('PRA_DABOM_Steelhead_', yr,'.rda')))
 
-#   rm(dabom_mod, jags_data, filter_obs)
-# }
+  rm(dabom_mod, jags_data, filter_obs)
+}
 
 #------------------------------------------------------------------------------
 # diagnostics

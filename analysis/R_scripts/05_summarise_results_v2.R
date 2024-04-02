@@ -61,22 +61,24 @@ for(yr in 2011:2023) {
   load(here("analysis/data/derived_data/model_fits",
             paste0('PRA_DABOM_Steelhead_', yr,'.rda')))
 
-  # read in updated biological data
-  bio_df <- read_rds(here('analysis/data/derived_data',
-                          'Bio_Data_2011_2023.rds')) |>
-    filter(spawn_year == yr) |>
-    rename(tag_code = pit_tag) #|>
-    # rename(age = age_scales,
-    #        fork_length = length)
+  # rename a few columns from bio data
+  bio_df <-
+    bio_df |>
+    rename(tag_code = pit_tag,
+           fork_length = length)
+
+  # # read in updated biological data
+  # bio_df <- read_rds(here('analysis/data/derived_data',
+  #                         'Bio_Data_2011_2023.rds')) |>
+  #   filter(spawn_year == yr) |>
+  #   rename(tag_code = pit_tag) #|>
+  #   # rename(age = age_scales,
+  #   #        fork_length = length)
 
 
   # estimate final spawning location
   tag_summ = summarizeTagData(filter_obs,
-                              bio_df %>%
-                                filter(tag_code %in% unique(filter_obs$tag_code)) %>%
-                                group_by(tag_code) %>%
-                                slice(1) %>%
-                                ungroup())
+                              bio_df)
 
   # look at which branch each tag was assigned to for spawning
   brnch_df = buildNodeOrder(addParentChildNodes(parent_child, configuration)) %>%

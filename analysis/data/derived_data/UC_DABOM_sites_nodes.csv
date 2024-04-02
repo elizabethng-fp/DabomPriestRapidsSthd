@@ -484,11 +484,11 @@ MDR,MDR_D,McDonald Road Bridge,INT,509.041
 MRC,MRC_D,Methow River at Carlton,INT,843.045
 MRW,MRW_D,Methow River at Winthrop,INT,843.085
 MRW,MRW_U,Methow River at Winthrop,INT,843.085
-"NAL","NAL_D",Lower Nason Creek,INT,754.089.001
-"NAL","NAL_U",Lower Nason Creek,INT,754.089.001
-"NASONC","NAL_U",Nason Creek (tributary to Wenatchee River),MRR,754.089
-"NAU","NAU_D",Upper Nason Creek,INT,754.089.019
-"NAU","NAU_U",Upper Nason Creek,INT,754.089.019
+NAL,NAL_D,Lower Nason Creek,INT,754.089.001
+NAL,NAL_U,Lower Nason Creek,INT,754.089.001
+NASONC,NAL_U,Nason Creek (tributary to Wenatchee River),MRR,754.089
+NAU,NAU_D,Upper Nason Creek,INT,754.089.019
+NAU,NAU_U,Upper Nason Creek,INT,754.089.019
 NMC,NMC_D,Ninemile Creek Instream Array,INT,858.134.001
 NMC,NMC_U,Ninemile Creek Instream Array,INT,858.134.001
 OBF,OBF,Omak Creek below Mission Falls,INT,858.052.011
@@ -556,6 +556,5 @@ WHS,WHS,Wildhorse Spring Creek,INT,858.114.001
 WTL,WTL_D,"White River, Wenatchee Basin",INT,754.090.003
 WHITER,WTL_U,"White River, Wenatchee River Basin",MRR,754.090
 WTL,WTL_U,"White River, Wenatchee Basin",INT,754.090.003
-ZSL,ZSL,Zosel Dam Combined,INT,858.132
 ZSL,ZSL_D,Zosel Dam Combined,INT,858.132
 ZSL,ZSL_U,Zosel Dam Combined,INT,858.132

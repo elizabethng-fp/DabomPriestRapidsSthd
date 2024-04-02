@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: Develop configuration file for DABOM
 # Created: 4/1/20
-# Last Modified: 8/30/23
+# Last Modified: 3/25/24
 # Notes:
 #
 # # install some needed packages
@@ -202,7 +202,7 @@ configuration = org_config %>%
                                        "(?i)Weir 2") &
                             config_id %in% c("100", "110") ~ "ZSL_U",
                           site_code == "ZSL" &
-                            !config_id %in% c("100", "110") ~ "ZSL",
+                            !config_id %in% c("100", "110") ~ "ZSL_D",
                           .default = node),
          node = if_else(site_code == 'SA1' & config_id == 110,
                         'SA1_D',

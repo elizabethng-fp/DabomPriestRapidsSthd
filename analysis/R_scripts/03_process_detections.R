@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: clean PTAGIS data with PITcleanr
 # Created: 4/27/20
-# Last Modified: 9/8/23
+# Last Modified: 3/25/24
 # Notes:
 
 # if needed, install development version of packages
@@ -25,29 +25,21 @@ load(here('analysis/data/derived_data/site_config.rda'))
 # which spawn year are we dealing with?
 yr = 2023
 
-# for(yr in 2011:2020) {
+# for(yr in 2011:2023) {
 
 # load and file biological data
-# bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2022.rds')) %>%
-#   filter(year == yr)
-
 bio_df = read_rds(here('analysis/data/derived_data/Bio_Data_2011_2023.rds')) %>%
-  filter(spawn_year == yr) #|>
-  # rename(tag_code = pit_tag)
-
-# bio_df <-
-#   read_excel(here('analysis/data/derived_data',
-#                   'PRA_Sthd_BioData_v2.xlsx'),
-#              sheet = as.character(yr)) |>
-#   clean_names() |>
-#   rename(tag_code = pit_tag)
-
+  filter(spawn_year == yr)
 
 # any double-tagged fish?
 dbl_tag = bio_df %>%
-  # filter(!is.na(tag_other))
   filter(!is.na(second_pit_tag))
 
+dbl_tag |>
+  select(spawn_year,
+         contains("tag"),
+         contains("pit"),
+         contains("date"))
 
 #-----------------------------------------------------------------
 # start date is June 1 of previous year
@@ -65,7 +57,8 @@ ptagis_obs = readCTH(ptagis_file)
 
 # add some observations from Colockum (CLK), a temporary antenna that only operated in some years
 if(yr %in% c(2015, 2018) ) {
-  clk_obs = read_csv(here('analysis/data/raw_data/WDFW/CLK_observations.csv')) %>%
+  clk_obs = read_csv(here('analysis/data/raw_data/WDFW/CLK_observations.csv'),
+                     show_col_types = F) %>%
     rename(tag_code = `Tag Code`) %>%
     mutate(event_type_name = "Observation",
            event_site_code_value = 'CLK',
@@ -101,35 +94,13 @@ qcTagHistory(ptagis_obs,
              ignore_event_vs_release = T)
 
 # deal with double tagged fish, assign all observations to one tag
-# if(nrow(dbl_tag) > 0) {
-#   ptagis_obs %<>%
-#     left_join(dbl_tag %>%
-#                 mutate(fish_id = 1:n()) %>%
-#                 select(fish_id,
-#                        starts_with("tag")) %>%
-#                 mutate(use_tag = tag_code) %>%
-#                 pivot_longer(cols = starts_with("tag"),
-#                              names_to = "source",
-#                              values_to = "tag_code") %>%
-#                 select(tag_code, use_tag),
-#               by = "tag_code") %>%
-#     rowwise() %>%
-#     mutate(tag_code = if_else(!is.na(use_tag),
-#                               use_tag,
-#                               tag_code)) %>%
-#     ungroup() %>%
-#     select(-use_tag) %>%
-#     distinct()
-# }
-
-# deal with double tagged fish, assign all observations to one tag
 if(nrow(dbl_tag) > 0) {
   ptagis_obs <-
     ptagis_obs |>
     left_join(dbl_tag %>%
                 mutate(fish_id = 1:n()) %>%
                 select(fish_id,
-                       contains("pit_tag")) %>%
+                       contains("tag")) %>%
                 mutate(use_tag = pit_tag) %>%
                 pivot_longer(cols = contains("pit_tag"),
                              names_to = "source",
@@ -159,8 +130,15 @@ prepped_ch = PITcleanr::prepWrapper(cth_file = ptagis_obs,
                                     ignore_event_vs_release = F,
                                     filter_orphan_disown_tags = FALSE,
                                     add_tag_detects = T,
-                                    save_file = F,
-                                    file_name = here('outgoing/PITcleanr', paste0('UC_Steelhead_', yr, '.xlsx')))
+                                    save_file = T,
+                                    # file_name = here('outgoing/PITcleanr', paste0('UC_Steelhead_', yr, '.xlsx')))
+                                    file_name = paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd",
+                                                       "/inputs",
+                                                       "/PITcleanr",
+                                                       "/PITcleanr Initial",
+                                                       "/UC_Steelhead_",
+                                                       yr,
+                                                       ".xlsx"))
 
 
 # save some stuff
@@ -186,6 +164,85 @@ load(here('analysis/data/derived_data/PITcleanr',
 # wdfw_df = read_excel(here('analysis/data/derived_data/WDFW',
 #                           paste0('UC_Steelhead_', yr, '.xlsx')))
 
+if(yr %in% c(2017:2021) & !yr %in% c(2015, 2018)) {
+  wdfw_df <-
+    read_excel(paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/inputs/PITcleanr/PITcleanr Final/",
+                      "UC_Steelhead_",
+                      yr,
+                      ".xlsx")) |>
+    clean_names() |>
+    rename(tag_code = tag_id,
+           min_det = obs_date,
+           max_det = last_obs_date,
+           start_date = trap_date,
+           auto_keep_obs = auto_proc_status,
+           user_keep_obs = user_proc_status) |>
+    mutate(across(ends_with("_det"),
+                  ~ ymd_hms(.))) |>
+    mutate(across(direction,
+                  ~ case_match(.,
+                               "Up" ~ "forward",
+                               "Down" ~ "backward",
+                               "Hold" ~ "no movement",
+                               .default = "unknown")),
+           across(direction,
+                  ~ if_else(node == "PRA",
+                            "start",
+                            .))) |>
+    add_column(event_type_name = NA_character_,
+               slot = NA_real_,
+               n_dets = NA_real_,
+               duration = NA_real_,
+               travel_time = NA_real_,
+               path = NA_character_,
+               tag_detects = NA_character_) |>
+    mutate(across(c(duration,
+                    travel_time),
+                  ~ as.difftime(., units = "mins"))) |>
+    select(any_of(names(prepped_ch)))
+
+} else if(yr %in% c(2011:2015, 2018)) {
+  wdfw_df <-
+    read_excel(paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/inputs/PITcleanr/PITcleanr Final/",
+                      "UC_Steelhead_",
+                      yr,
+                      ".xlsx")) |>
+    clean_names() |>
+    rename(tag_code = tag_id,
+           min_det = obs_date,
+           max_det = last_obs_date,
+           start_date = trap_date,
+           auto_keep_obs = auto_proc_status,
+           user_keep_obs = user_proc_status) |>
+    mutate(across(ends_with("_det"),
+                  ~ ymd_hms(.)),
+           across(node,
+                  ~ case_when(site_id == "CLK" &
+                                is.na(.) ~ "CLK",
+                              .default = .))) |>
+    mutate(across(direction,
+                  ~ case_match(.,
+                               "Up" ~ "forward",
+                               "Down" ~ "backward",
+                               "Hold" ~ "no movement",
+                               .default = "unknown")),
+           across(direction,
+                  ~ if_else(node == "PRA",
+                            "start",
+                            .))) |>
+    add_column(event_type_name = NA_character_,
+               slot = NA_real_,
+               n_dets = NA_real_,
+               duration = NA_real_,
+               travel_time = NA_real_,
+               path = NA_character_,
+               tag_detects = NA_character_) |>
+    mutate(across(c(duration,
+                    travel_time),
+                  ~ as.difftime(., units = "mins"))) |>
+    select(any_of(names(prepped_ch)))
+} else {
+
 wdfw_df <-
   read_excel(paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd/inputs/PITcleanr/PITcleanr Final/",
                     "UC_Steelhead_",
@@ -194,13 +251,34 @@ wdfw_df <-
   mutate(across(c(duration,
                   travel_time),
                 ~ as.difftime(., units = "mins"))) |>
-  select(all_of(names(prepped_ch)))
+  select(any_of(names(prepped_ch)))
+}
+
+if(!"tag_detects" %in% names(wdfw_df)) {
+  wdfw_df <-
+    wdfw_df |>
+    add_column(tag_detects = NA_character_)
+}
+# wdfw_df |>
+#   add_columns(names(prepped_ch)[! names(prepped_ch) %in% names(wdfw_df)] = NA_character_) |>
+#   select(all_of(names(prepped_ch)))
 
 identical(n_distinct(prepped_ch$tag_code),
           n_distinct(wdfw_df$tag_code))
 
+n_distinct(prepped_ch$tag_code)
+n_distinct(wdfw_df$tag_code)
+
 nrow(wdfw_df)
 nrow(prepped_ch)
+
+if(class(wdfw_df$auto_keep_obs) == "character" |
+   class(wdfw_df$user_keep_obs) == "character") {
+  wdfw_df <-
+    wdfw_df |>
+    mutate(across(ends_with("keep_obs"),
+                  ~ as.logical(.)))
+}
 
 
 # update with new node codes
@@ -222,39 +300,214 @@ if(sum(str_detect(wdfw_df$node, "B0$")) > 0) {
                   ~ str_replace_all(., " S_U", " SA0")))
 }
 
+# change a few nodes
+wdfw_df <-
+  wdfw_df |>
+  mutate(across(node,
+                ~ case_match(.,
+                            "PRH_U" ~ "PRH",
+                            "PRH_D" ~ "PRH",
+                            c("ZSL",
+                              "ZSL_U") ~ "ZSL_D",
+                            "BelowJD1" ~ "JDA",
+                            "LMR" ~ "LMR_D",
+                            .default = .)))
+
 # what rows are in prepped_ch but not in wdfw_df?
 prepped_ch |>
   select(tag_code:min_det,
-         -n_dets) |>
-  anti_join(wdfw_df)
+         -n_dets,
+         -slot) |>
+  anti_join(wdfw_df |>
+              select(tag_code,
+                     node,
+                     min_det))
+
+
+prepped_ch |>
+  select(tag_code:min_det,
+         -n_dets,
+         -slot) |>
+  mutate(across(min_det,
+                ~ floor_date(., unit = "days"))) |>
+  anti_join(wdfw_df |>
+              mutate(across(min_det,
+                            ~ floor_date(., unit = "days"))))
 
 # vice versa?
 wdfw_df |>
   select(tag_code:min_det,
-         -n_dets) |>
-  anti_join(prepped_ch)
+         -event_type_name,
+         -n_dets,
+         -slot) |>
+  mutate(across(min_det,
+                ~ floor_date(., unit = "days"))) |>
+  anti_join(prepped_ch |>
+              mutate(across(min_det,
+                            ~ floor_date(., unit = "days"))))
 
+#----------------------------
+# combine them both
+joint_prep <-
+  prepped_ch |>
+  mutate(min_date = floor_date(min_det,
+                               unit = "days")) |>
+  full_join(wdfw_df |>
+              mutate(min_date = floor_date(min_det,
+                                           unit = "days")) |>
+              select(tag_code,
+                     node,
+                     min_date,
+                     # min_det,
+                     wdfw_keep_obs = user_keep_obs) |>
+              filter(tag_code %in% unique(prepped_ch$tag_code)),
+            by = join_by(tag_code,
+                         node,
+                         # min_det)) |>
+            min_date),
+            relationship = "many-to-many") |>
+  group_by(tag_code,
+           node,
+           slot) |>
+  slice(1) |>
+  ungroup() |>
+  arrange(tag_code,
+          slot)
 
+joint_prep |>
+  filter(is.na(auto_keep_obs)) |>
+  tabyl(node) |>
+  adorn_totals() |>
+  adorn_pct_formatting()
+# ZSL_U and METH_D are no longer in model, so ignore those issues
+# all the PRA issues are to do with date fixes (the detection date was changed in PTAGIS prior to wdfw_df being created)
+# PRH was changed to a single node, so don't worry about those
 
-prepped_ch |>
-  select(tag_code:min_det,
-         -n_dets) |>
-  anti_join(wdfw_df) |>
+joint_prep |>
+  filter(is.na(auto_keep_obs)) |>
+  filter(!node %in% c("METH_D",
+                      "ZSL_U",
+                      "PRA")) |>
+  # filter(node == "PRA") |>
   select(tag_code) |>
   distinct() |>
   slice(1) |>
-  left_join(prepped_ch |>
-              select(tag_code:max_det,
-                     auto_keep_obs,
-                     user_keep_obs,
-                     path)) |>
+  left_join(joint_prep,
+            by = join_by(tag_code)) |>
+  arrange(min_det) |>
+  select(tag_code:min_det,
+         min_date,
+         direction,
+         ends_with("_obs")) |>
+  as.data.frame()
+
+#---------------------------------------------
+# combine them both
+#---------------------------------------------
+joint_prep <-
+  prepped_ch |>
+  mutate(min_date = floor_date(min_det,
+                               unit = "days")) |>
   left_join(wdfw_df |>
-              select(tag_code:max_det,
-                     wdfw_keep_obs = user_keep_obs)) |>
-  select(-path,
-         -max_det) #|>
-  # tail(10)
-  # select(-user_keep_obs)
+              mutate(min_date = floor_date(min_det,
+                                           unit = "days")) |>
+              select(tag_code,
+                     node,
+                     # min_det,
+                     min_date,
+                     wdfw_keep_obs = user_keep_obs) |>
+              mutate(across(node,
+                            ~ case_match(.,
+                                         c("ZSL",
+                                           "ZSL_U") ~  "ZSL_D",
+                                         c("PRH_D",
+                                           "PRH_U") ~ "PRH",
+                                         .default = .))) |>
+              filter(tag_code %in% unique(prepped_ch$tag_code)) |>
+              distinct(),
+            by = join_by(tag_code,
+                         node,
+                         # min_det)) |>
+                         min_date),
+            relationship = "many-to-many") |>
+  group_by(tag_code,
+           node,
+           slot) |>
+  slice(1) |>
+  ungroup() |>
+  arrange(tag_code,
+          slot) |>
+  group_by(tag_code) |>
+  mutate(across(wdfw_keep_obs,
+                ~ case_when(node == "PRA" &
+                              is.na(.) &
+                              sum(wdfw_keep_obs[node == "PRA" & tag_code == tag_code], na.rm = T) > 0 ~ T,
+                            node == "WEA" &
+                              is.na(.) &
+                              sum(wdfw_keep_obs[node == "WEA" & tag_code == tag_code], na.rm = T) > 0 ~ T,
+                            node == "TUM" &
+                              is.na(.) &
+                              sum(wdfw_keep_obs[node == "TUM" & tag_code == tag_code], na.rm = T) > 0 ~ T,
+                            .default = .))) |>
+  ungroup()
+
+joint_prep |>
+  filter(is.na(wdfw_keep_obs) |
+           auto_keep_obs != wdfw_keep_obs) |>
+  select(tag_code) |>
+  distinct() |>
+  # slice(1) |>
+  sample_n(1) |>
+  left_join(joint_prep) |>
+  select(-c(max_det:path,
+            tag_detects))
+
+joint_prep |>
+  group_by(tag_code) |>
+  mutate(n_rows = n(),
+         wdfw_na = sum(is.na(wdfw_keep_obs)),
+         wdfw_disagree = sum(wdfw_keep_obs != auto_keep_obs, na.rm = T)) |>
+  ungroup() |>
+  mutate(across(user_keep_obs,
+                ~ case_when(is.na(.) & wdfw_na == 0 ~ wdfw_keep_obs,
+                            is.na(.) & wdfw_disagree == 0 & (wdfw_na != n_rows) ~ auto_keep_obs,
+                            .default = .))) |>
+  filter(is.na(user_keep_obs)) |>
+  select(tag_code,
+         n_rows,
+         wdfw_na,
+         wdfw_disagree) |>
+  distinct() #|>
+  # filter(wdfw_disagree > 0)
+
+joint_prep |>
+  select(-c(duration:path,
+            tag_detects,
+            min_date)) |>
+  filter(tag_code == "3D9.1C2D8CDC28")
+
+
+# try to merge with older WDWF version, and save an Excel version
+joint_prep |>
+  group_by(tag_code) |>
+  mutate(n_rows = n(),
+         wdfw_na = sum(is.na(wdfw_keep_obs)),
+         wdfw_disagree = sum(wdfw_keep_obs != auto_keep_obs, na.rm = T)) |>
+  ungroup() |>
+  mutate(across(user_keep_obs,
+                ~ case_when(is.na(.) & wdfw_na == 0 ~ wdfw_keep_obs,
+                            is.na(.) & wdfw_disagree == 0 & (wdfw_na != n_rows) ~ auto_keep_obs,
+                            .default = .))) |>
+  select(all_of(names(joint_prep))) |>
+  # writexl::write_xlsx(here('outgoing/PITcleanr', paste0('UC_Steelhead_', yr, '.xlsx')))
+  writexl::write_xlsx(paste0("T:/DFW-Team FP Upper Columbia Escapement - General/UC_Sthd",
+                             "/inputs",
+                             "/PITcleanr",
+                             "/PITcleanr Initial",
+                             "/UC_Steelhead_",
+                             yr,
+                             ".xlsx"))
+
 
 # add a few rows back, and correct the user_keep_obs field
 
@@ -318,7 +571,9 @@ tabyl(wdfw_df,
       user_keep_obs)
 
 
-filter_obs = wdfw_df %>%
+filter_obs <-
+  wdfw_df %>%
+  # joint_prep |>
   mutate(user_keep_obs = if_else(is.na(user_keep_obs),
                                  auto_keep_obs,
                                  user_keep_obs)) %>%
@@ -360,7 +615,14 @@ prepped_ch = prepped_ch %>%
   select(-user_keep_obs) %>%
   left_join(wdfw_df %>%
               select(tag_code:max_det,
-                     user_keep_obs))
+                     user_keep_obs),
+            by = join_by(tag_code,
+                         node,
+                         slot,
+                         event_type_name,
+                         n_dets,
+                         min_det,
+                         max_det))
 
 save(parent_child, configuration, start_date, bio_df, prepped_ch,
      file = here('analysis/data/derived_data/PITcleanr',
@@ -458,9 +720,10 @@ tag_summ %>%
 
 # age comp in each branch, by sex
 tag_summ %>%
-  filter(!is.na(age_scales)) %>%
+  filter(!is.na(age),
+         !is.na(sex)) %>%
   ggplot(aes(x = branch_nm,
-             fill = as.ordered(age_scales))) +
+             fill = as.ordered(age))) +
   geom_bar(position = position_fill()) +
   facet_wrap(~ sex) +
   theme_bw() +
