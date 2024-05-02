@@ -1,7 +1,7 @@
 # Author: Kevin See
 # Purpose: Develop configuration file for DABOM
 # Created: 4/1/20
-# Last Modified: 3/25/24
+# Last Modified: 5/2/24 by Elizabeth Ng
 # Notes:
 #
 # # install some needed packages
@@ -29,6 +29,7 @@ library(tidyverse)
 library(magrittr)
 library(sf)
 library(here)
+library(nhdplusTools) # dependency of PITcleanr
 
 #-----------------------------------------------------------------
 # set starting point
@@ -361,9 +362,11 @@ if(dwn_flw) {
 # upstream extent of study area (cut off areas further upstream)
 upstrm_loc = "Chief Joseph Dam"
 
-library(ggmap)
-
-upstrm_comid = ggmap::geocode(upstrm_loc, output = "latlon") %>%
+# instead of using google maps API just provide the coordinates of
+# the upstream-most location
+# library(ggmap)
+# ggmap::geocode(upstrm_loc, output = "latlon")
+upstrm_comid = tibble(lat = 47.995278,lon = -119.633333) %>%
   st_as_sf(coords = c("lon", "lat"),
            crs = 4326) %>%
   nhdplusTools::discover_nhdplus_id()
